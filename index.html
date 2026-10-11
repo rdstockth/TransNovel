@@ -311,6 +311,9 @@
       background: var(--panel);
     }
 
+    /* display:flex ด้านบนจะทับ attribute hidden จึงต้องกำหนดซ้ำ */
+    .page-toolbar[hidden], .audio-panel[hidden] { display: none; }
+
     .page-toolbar {
       justify-content: center;
       margin: 0 auto 18px;
@@ -364,13 +367,7 @@
       line-height: var(--line-height);
       overflow-wrap: anywhere;
       scrollbar-width: thin;
-      /* เส้นบอกทุก 10 บรรทัด */
-      background-image: linear-gradient(to bottom, transparent calc(100% - 1px), var(--guide) 0);
-      background-size: 100% calc(var(--reader-size) * var(--line-height) * 10);
-      background-attachment: local;
     }
-
-    body.no-guides .flow { background-image: none; }
 
     .flow > :first-child { margin-top: 0; }
     .flow h1, .flow h2, .flow h3 { line-height: 1.35; }
@@ -442,7 +439,6 @@
     .reading-flow {
       height: auto;
       overflow: visible;
-      background-image: none;
     }
 
     .flow hr.source-break {
@@ -597,11 +593,6 @@
         </div>
 
         <div class="setting">
-          <label for="guideToggle">เส้นบอกทุก 10 บรรทัด</label>
-          <input id="guideToggle" type="checkbox" checked>
-        </div>
-
-        <div class="setting">
           <label for="readFromPage">Reading mode เริ่มจากหน้าที่เลือก</label>
           <input id="readFromPage" type="checkbox" checked>
         </div>
@@ -735,8 +726,8 @@
         <div class="speed">
           <label for="rateInput">ความเร็ว</label>
           <input id="rateInput" type="range" min="0.7" max="1.3"
-            step="0.05" value="0.95">
-          <output id="rateValue">0.95×</output>
+            step="0.05" value="0.85">
+          <output id="rateValue">0.85×</output>
         </div>
 
         <span id="voiceHint" aria-live="polite"></span>
@@ -1146,7 +1137,8 @@
         );
 
         if (password === null) {
-          task.destroy();
+          cancelProcessing();
+          setStatus("ยกเลิกการใส่รหัสผ่านแล้ว");
         } else {
           updatePassword(password);
         }
@@ -1280,12 +1272,6 @@
       );
 
       if (note) setStatus($("status").textContent + ` · ${note}`);
-
-      for (const image of pagesHost.querySelectorAll("img")) {
-        if (!image.complete) {
-          image.addEventListener("load", schedulePagination, { once: true });
-        }
-      }
     }
 
     async function openFile(file) {
@@ -1544,6 +1530,14 @@
 
     /* ----- ควบคุมการอ่าน ----- */
 
+    // ต้อง resume ก่อน cancel ไม่เช่นนั้นเสียงรอบถัดไปจะค้างในสถานะพัก
+    function cancelSpeech() {
+      if (!speechSupported) return;
+      if (speechSynthesis.paused) speechSynthesis.resume();
+      speechSynthesis.cancel();
+      $("pauseBtn").textContent = "พักเสียง";
+    }
+
     function stopReading() {
       speechSession++;
       utteranceId++;
@@ -1556,14 +1550,13 @@
       speechPage = 0;
       currentlySpeakingIndex = -1;
 
-      if (speechSupported) speechSynthesis.cancel();
+      cancelSpeech();
       setHighlight(null);
 
       $("pauseBtn").disabled = true;
       $("stopBtn").disabled = true;
       $("prevBtn").disabled = true;
       $("nextBtn").disabled = true;
-      $("pauseBtn").textContent = "พักเสียง";
     }
 
     // ดึงข้อความของหน้านั้น "ตอนที่จะอ่านจริง" เพื่อให้ได้ข้อความที่ Edge แปลแล้ว
@@ -1710,7 +1703,7 @@
 
       clearTimeout(pageDelayTimer);
       utteranceId++;
-      speechSynthesis.cancel();
+      cancelSpeech();
 
       if (next >= speechItems.length) {
         advancePage(session, 0); // บรรทัดสุดท้ายของหน้า: ไปหน้าถัดไปทันที
@@ -1733,7 +1726,7 @@
       const session = speechSession;
       clearTimeout(pageDelayTimer);
       utteranceId++;
-      speechSynthesis.cancel();
+      cancelSpeech();
 
       if (currentlySpeakingIndex <= 0) {
         if (speechPage > 0) {
@@ -1821,13 +1814,25 @@
       return nodes;
     }
 
+    // ตัดตามขอบเขตคำ ไม่ตัดกลางพยัญชนะ/สระ/วรรณยุกต์ไทย
     function getBoundaries(text) {
       const result = [0];
-      let offset = 0;
-      for (const character of text) {
-        offset += character.length;
-        result.push(offset);
+
+      if ("Segmenter" in Intl) {
+        const segmenter = new Intl.Segmenter($("sourceLanguage").value, {
+          granularity: "word"
+        });
+        for (const s of segmenter.segment(text)) {
+          result.push(s.index + s.segment.length);
+        }
+      } else {
+        let offset = 0;
+        for (const character of text) {
+          offset += character.length;
+          result.push(offset);
+        }
       }
+
       return result;
     }
 
@@ -1863,6 +1868,21 @@
       activeFlow.append(whole);
       if (fits(activeFlow)) return activeFlow;
       whole.remove();
+
+      // ลิสต์ยาว: แบ่งทีละรายการ
+      if (/^(UL|OL)$/.test(block.tagName) && block.children.length > 1) {
+        let number = Number(block.getAttribute("start")) || 1;
+
+        for (const item of block.children) {
+          const shell = block.cloneNode(false);
+          if (block.tagName === "OL") shell.setAttribute("start", String(number));
+          number++;
+          shell.append(item.cloneNode(true));
+          activeFlow = addBlock(shell, activeFlow);
+        }
+
+        return activeFlow;
+      }
 
       if (activeFlow.childNodes.length) {
         const nextFlow = makePage();
@@ -1966,7 +1986,23 @@
       }
     }
 
-    function paginate(keepPage = 0) {
+    // ตำแหน่งตัวอักษร (ในต้นฉบับ) ที่หน้านั้นเริ่มต้น
+    function pageOffset(index) {
+      let total = 0;
+      for (let i = 0; i < index; i++) total += pageElements[i]._orig.length;
+      return total;
+    }
+
+    function pageForOffset(offset) {
+      let total = 0;
+      for (let i = 0; i < pageElements.length; i++) {
+        total += pageElements[i]._orig.length;
+        if (offset < total) return i;
+      }
+      return Math.max(0, pageElements.length - 1);
+    }
+
+    function paginate(keepPage = 0, keepOffset = null) {
       if (!sourceHtml) return;
 
       if (readingView) {
@@ -2003,7 +2039,17 @@
         nav.hidden = false;
       });
 
-      showPage(keepPage, false);
+      // รูปที่ยังโหลดไม่เสร็จทำให้ความสูงที่วัดผิด: แบ่งหน้าใหม่เมื่อโหลดเสร็จ
+      for (const image of pagesHost.querySelectorAll("img")) {
+        if (!image.complete) {
+          image.addEventListener("load", schedulePagination, { once: true });
+        }
+      }
+
+      showPage(
+        keepOffset === null ? keepPage : pageForOffset(keepOffset),
+        false
+      );
       setStatus(`แบ่งเอกสารเป็น ${pageElements.length} หน้า (หน้าละประมาณ 50 บรรทัด)`);
     }
 
@@ -2016,7 +2062,8 @@
       }
 
       clearTimeout(renderTimer);
-      renderTimer = setTimeout(() => paginate(currentPage), 180);
+      const offset = pageElements.length ? pageOffset(currentPage) : 0;
+      renderTimer = setTimeout(() => paginate(0, offset), 180);
     }
 
     // เปลี่ยนหน้าด้วยมือ: ถ้ากำลังอ่านอยู่ ให้หยุดรอ แล้วอ่านต่อจากหน้าที่เปลี่ยนไป
@@ -2032,8 +2079,7 @@
 
       utteranceId++;
       clearTimeout(pageDelayTimer);
-      if (speechSynthesis.paused) speechSynthesis.resume();
-      speechSynthesis.cancel();
+      cancelSpeech();
       setHighlight(null);
 
       speechItems = [];
@@ -2048,7 +2094,6 @@
       $("stopBtn").disabled = false;
       $("prevBtn").disabled = false;
       $("nextBtn").disabled = false;
-      $("pauseBtn").textContent = "พักเสียง";
 
       setStatus(
         `เปลี่ยนเป็นหน้า ${target + 1} แล้ว · ` +
@@ -2134,11 +2179,8 @@
           : 0;
 
       if (startPage > 0) {
-        let before = 0;
-        for (let i = 0; i < startPage; i++) {
-          before += pageElements[i].querySelector(".flow").textContent.length;
-        }
-        trimBeforeOffset(template.content, before);
+        // ใช้ข้อความต้นฉบับ ไม่ใช่ข้อความที่ Edge แปลแล้ว
+        trimBeforeOffset(template.content, pageOffset(startPage));
       }
 
       for (const marker of template.content.querySelectorAll("p.source-marker")) {
@@ -2220,10 +2262,6 @@
       document.body.classList.toggle("dark", event.target.value === "dark");
     });
 
-    $("guideToggle").addEventListener("change", event => {
-      document.body.classList.toggle("no-guides", !event.target.checked);
-    });
-
     $("sourceLanguage").addEventListener("change", updateLanguage);
 
     for (const id of ["pdfMode", "ocrLang"]) {
@@ -2281,7 +2319,10 @@
       });
     }
 
-    $("dropzone").addEventListener("drop", event => {
+    // วางไฟล์ตรงไหนของหน้าก็ได้ (กัน Edge เปิดไฟล์ทับหน้าแอป)
+    document.addEventListener("dragover", event => event.preventDefault());
+    document.addEventListener("drop", event => {
+      event.preventDefault();
       openFile(event.dataTransfer?.files?.[0]);
     });
 
