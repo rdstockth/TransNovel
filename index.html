@@ -343,7 +343,17 @@
       overflow: hidden;
     }
 
-    .sheet[hidden] { display: none; }
+    /* หน้าที่ไม่ได้แสดงยังอยู่ใน DOM และไม่ใช้ display:none
+       เพื่อให้ตัวแปลของ Edge แปลหน้าเหล่านั้นล่วงหน้าได้ */
+    .sheet[hidden] {
+      display: block;
+      position: absolute;
+      left: -10000px;
+      top: 0;
+      width: min(794px, 100vw);
+      visibility: hidden;
+      pointer-events: none;
+    }
 
     .flow {
       width: 100%;
@@ -813,6 +823,8 @@
 
     // ดีเลย์ก่อนเลื่อนไปหน้าถัดไปตอนอ่านจบหน้า (มิลลิวินาที)
     const PAGE_DELAY_MS = 4000;
+    // เวลารอสูงสุดให้ Edge แปลหน้าใหม่ก่อนเริ่มอ่าน
+    const TRANSLATE_WAIT_MS = 8000;
 
     let sourceHtml = "";
     let fontSize = 17;
@@ -825,6 +837,11 @@
     let speechSession = 0;
     let currentlySpeakingIndex = -1;
     let pageDelayTimer = 0;
+    let delayPending = false;
+    let speechLoading = false;
+    let speechPage = 0;
+    let pendingPage = -1;
+    let utteranceId = 0;
     let fileRequest = 0;
     let renderTimer = 0;
     let lastLayoutWidth = 0;
@@ -1423,7 +1440,7 @@
         if (index >= 0) return voices[index];
       }
 
-      return voiceForLanguage($("sourceLanguage").value);
+      return voiceForLanguage(spokenLanguage());
     }
 
     function splitSpeech(text, language, maxLength = 160) {
@@ -1483,11 +1500,60 @@
       }
     }
 
+    /* ----- การแปลของ Edge ----- */
+
+    // Edge ใส่ class translated-ltr/rtl ที่ <html> หรือ attribute _msttexthash ที่ข้อความที่แปลแล้ว
+    function translatedMode() {
+      return /\btranslated-(ltr|rtl)\b/.test(document.documentElement.className) ||
+        !!document.querySelector("[_msttexthash]");
+    }
+
+    function spokenLanguage() {
+      return translatedMode()
+        ? (document.documentElement.lang || $("sourceLanguage").value)
+        : $("sourceLanguage").value;
+    }
+
+    const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+    // รอให้ Edge แปลหน้านี้เสร็จ (ถ้าเปิดการแปลอยู่) แล้วค่อยอ่านข้อความที่แปลแล้ว
+    async function waitForTranslation(pageIndex, session) {
+      const page = pageElements[pageIndex];
+      if (!page || !translatedMode()) return;
+
+      const flow = page.querySelector(".flow");
+      const letters = (flow.textContent.match(/\p{L}/gu) || []).length;
+      if (letters < 30) return;
+
+      const changed = () => flow.textContent !== page._orig;
+
+      if (!changed()) {
+        setStatus(`กำลังรอ Edge แปลหน้า ${pageIndex + 1}…`);
+        const deadline = Date.now() + TRANSLATE_WAIT_MS;
+
+        while (!changed() && Date.now() < deadline) {
+          await sleep(250);
+          if (session !== speechSession) return;
+        }
+
+        if (!changed()) return; // ไม่มีการแปล: อ่านข้อความต้นฉบับต่อ
+      }
+
+      await sleep(500); // ให้ Edge แปลส่วนที่เหลือของหน้าให้เสร็จ
+    }
+
+    /* ----- ควบคุมการอ่าน ----- */
+
     function stopReading() {
       speechSession++;
+      utteranceId++;
       clearTimeout(pageDelayTimer);
+      delayPending = false;
+      speechLoading = false;
+      pendingPage = -1;
       speechItems = [];
       speechIndex = 0;
+      speechPage = 0;
       currentlySpeakingIndex = -1;
 
       if (speechSupported) speechSynthesis.cancel();
@@ -1500,70 +1566,115 @@
       $("pauseBtn").textContent = "พักเสียง";
     }
 
-    function collectSpeechItems(fromPage, language) {
+    // ดึงข้อความของหน้านั้น "ตอนที่จะอ่านจริง" เพื่อให้ได้ข้อความที่ Edge แปลแล้ว
+    function collectPageItems(pageIndex, language) {
       const items = [];
+      const flow = pageElements[pageIndex]?.querySelector(".flow");
+      if (!flow) return items;
 
-      pageElements.forEach((page, pageIndex) => {
-        if (pageIndex < fromPage) return;
+      for (const block of flow.children) {
+        if (block.classList.contains("source-marker")) continue;
 
-        for (const block of page.querySelector(".flow").children) {
-          if (block.classList.contains("source-marker")) continue;
-
-          for (const text of splitSpeech(block.textContent, language)) {
-            items.push({ text, pageIndex, element: block });
-          }
+        for (const text of splitSpeech(block.textContent, language)) {
+          items.push({ text, pageIndex, element: block });
         }
-      });
+      }
 
       return items;
     }
 
-    function speakNext(session, immediate = false) {
+    async function startPage(session, pageIndex, from = "first") {
       if (session !== speechSession) return;
 
-      if (speechIndex >= speechItems.length) {
-        currentlySpeakingIndex = -1;
+      speechLoading = true;
+      speechPage = pageIndex;
+      if (currentPage !== pageIndex) showPage(pageIndex, false);
+
+      await waitForTranslation(pageIndex, session);
+      if (session !== speechSession) return;
+
+      const voice = resolveVoice();
+      speechItems = collectPageItems(pageIndex, voice?.lang || "th");
+      speechIndex = from === "last" ? Math.max(0, speechItems.length - 1) : 0;
+      currentlySpeakingIndex = -1;
+      speechLoading = false;
+
+      if (!speechItems.length) {
+        advancePage(session, 0); // หน้าว่าง: ข้ามไปหน้าถัดไป
+        return;
+      }
+
+      setStatus(
+        `กำลังอ่านออกเสียงหน้า ${pageIndex + 1} ` +
+        `ด้วย ${voice?.name || "เสียงเริ่มต้นของระบบ"}`
+      );
+      speakNext(session);
+    }
+
+    // อ่านจบหน้า: เลื่อนไปหน้าถัดไปทันที แล้วรอ 4 วินาทีก่อนเริ่มอ่านต่อ
+    function advancePage(session, delay = PAGE_DELAY_MS) {
+      if (session !== speechSession) return;
+
+      const next = speechPage + 1;
+
+      if (next >= pageElements.length) {
         stopReading();
         setStatus("อ่านเอกสารจบแล้ว");
         return;
       }
 
-      const item = speechItems[speechIndex];
-      const previous = speechItems[speechIndex - 1];
+      setHighlight(null);
+      pendingPage = next;
 
-      // ขึ้นหน้าใหม่: รอ 4 วินาที แล้วค่อยเลื่อนหน้าและอ่านต่อ
-      if (!immediate && previous && previous.pageIndex !== item.pageIndex) {
-        setHighlight(null);
-        setStatus(
-          `จบหน้า ${previous.pageIndex + 1} แล้ว · ` +
-          `จะเลื่อนไปหน้า ${item.pageIndex + 1} ใน ${PAGE_DELAY_MS / 1000} วินาที…`
-        );
-        clearTimeout(pageDelayTimer);
-        pageDelayTimer = setTimeout(() => speakNext(session, true), PAGE_DELAY_MS);
+      if (delay <= 0) {
+        startPage(session, next);
         return;
       }
 
-      speechIndex++;
+      speechLoading = true;
+      showPage(next);
+      setStatus(
+        `เลื่อนไปหน้า ${next + 1} แล้ว · ` +
+        `จะเริ่มอ่านต่อใน ${delay / 1000} วินาที…`
+      );
+
+      delayPending = true;
+      clearTimeout(pageDelayTimer);
+      pageDelayTimer = setTimeout(() => {
+        delayPending = false;
+        startPage(session, next);
+      }, delay);
+    }
+
+    function speakNext(session) {
+      if (session !== speechSession) return;
+
+      if (speechIndex >= speechItems.length) {
+        advancePage(session);
+        return;
+      }
+
+      const item = speechItems[speechIndex++];
       currentlySpeakingIndex = speechIndex - 1;
+
+      if (currentPage !== speechPage) showPage(speechPage, false);
 
       const voice = resolveVoice();
       const utterance = new SpeechSynthesisUtterance(item.text);
+      const id = ++utteranceId;
 
       utterance.lang = voice?.lang || "th-TH";
       if (voice) utterance.voice = voice;
       utterance.rate = Number($("rateInput").value);
       utterance.pitch = 1;
 
-      if (item.pageIndex !== currentPage) {
-        showPage(item.pageIndex, false);
-        setStatus(`กำลังอ่านออกเสียง · หน้า ${item.pageIndex + 1}`);
-      }
-
       setHighlight(item.element);
 
-      utterance.onend = () => speakNext(session);
+      utterance.onend = () => {
+        if (id === utteranceId) speakNext(session);
+      };
       utterance.onerror = event => {
-        if (session !== speechSession) return;
+        if (session !== speechSession || id !== utteranceId) return;
         if (["canceled", "interrupted"].includes(event.error)) return;
         stopReading();
         setStatus("อ่านออกเสียงไม่สำเร็จ กรุณาตรวจสอบอินเทอร์เน็ตหรือลองเลือกเสียงอื่น");
@@ -1573,43 +1684,72 @@
     }
 
     function skipNext() {
+      // กำลังรอ 4 วินาทีข้ามหน้า: ข้ามการรอแล้วอ่านเลย
+      if (delayPending) {
+        clearTimeout(pageDelayTimer);
+        delayPending = false;
+        startPage(speechSession, pendingPage);
+        return;
+      }
+
+      if (speechLoading) return;
+
       if (speechItems.length === 0) {
         setStatus("ยังไม่มีอะไรให้อ่าน กด «▶ อ่านจากหน้านี้» ก่อน");
         return;
       }
 
-      if (currentlySpeakingIndex >= speechItems.length - 1) {
+      const session = speechSession;
+      const next = currentlySpeakingIndex + 1;
+      const lastPage = speechPage >= pageElements.length - 1;
+
+      if (next >= speechItems.length && lastPage) {
         setStatus("⏭ อยู่บรรทัดสุดท้ายแล้ว");
         return;
       }
 
       clearTimeout(pageDelayTimer);
+      utteranceId++;
       speechSynthesis.cancel();
-      speechIndex = currentlySpeakingIndex + 1;
-      setStatus(`ข้ามไปยังบรรทัดที่ ${speechIndex + 1}`);
-      setTimeout(() => speakNext(speechSession, true), 30);
+
+      if (next >= speechItems.length) {
+        advancePage(session, 0); // บรรทัดสุดท้ายของหน้า: ไปหน้าถัดไปทันที
+        return;
+      }
+
+      speechIndex = next;
+      setStatus(`ข้ามไปยังบรรทัดที่ ${next + 1} ของหน้านี้`);
+      setTimeout(() => speakNext(session), 30);
     }
 
     function goPrev() {
+      if (delayPending || speechLoading) return;
+
       if (speechItems.length === 0) {
         setStatus("ยังไม่มีอะไรให้อ่าน กด «▶ อ่านจากหน้านี้» ก่อน");
         return;
       }
 
+      const session = speechSession;
+      clearTimeout(pageDelayTimer);
+      utteranceId++;
+      speechSynthesis.cancel();
+
       if (currentlySpeakingIndex <= 0) {
-        clearTimeout(pageDelayTimer);
-        speechSynthesis.cancel();
+        if (speechPage > 0) {
+          setStatus(`ย้อนไปหน้า ${speechPage}`);
+          startPage(session, speechPage - 1, "last");
+          return;
+        }
+
         speechIndex = 0;
         setStatus("⏮ อยู่บรรทัดแรกแล้ว");
-        setTimeout(() => speakNext(speechSession, true), 30);
-        return;
+      } else {
+        speechIndex = currentlySpeakingIndex - 1;
+        setStatus(`ย้อนไปยังบรรทัดที่ ${speechIndex + 1} ของหน้านี้`);
       }
 
-      clearTimeout(pageDelayTimer);
-      speechSynthesis.cancel();
-      speechIndex = currentlySpeakingIndex - 1;
-      setStatus(`ย้อนไปยังบรรทัดที่ ${speechIndex + 1}`);
-      setTimeout(() => speakNext(speechSession, true), 30);
+      setTimeout(() => speakNext(session), 30);
     }
 
     $("playBtn").addEventListener("click", () => {
@@ -1617,20 +1757,12 @@
 
       stopReading();
 
-      const voice = resolveVoice();
-      speechItems = collectSpeechItems(currentPage, voice?.lang || "th");
-
-      if (!speechItems.length) {
-        setStatus("ไม่มีข้อความให้อ่าน");
-        return;
-      }
-
       $("pauseBtn").disabled = false;
       $("stopBtn").disabled = false;
       $("prevBtn").disabled = false;
       $("nextBtn").disabled = false;
-      setStatus(`กำลังอ่านออกเสียงด้วย ${voice?.name || "เสียงเริ่มต้นของระบบ"}`);
-      speakNext(speechSession);
+
+      startPage(speechSession, currentPage);
     });
 
     $("pauseBtn").addEventListener("click", () => {
@@ -1808,7 +1940,10 @@
       currentPage = Math.max(0, Math.min(index, pageElements.length - 1));
 
       pageElements.forEach((page, i) => {
-        page.hidden = i !== currentPage;
+        const active = i === currentPage;
+        page.hidden = !active;
+        page.inert = !active;
+        page.setAttribute("aria-hidden", String(!active));
       });
 
       const label = `หน้า ${currentPage + 1} / ${pageElements.length}`;
@@ -1857,6 +1992,11 @@
       if (pageElements.length > 1 &&
           !pageElements.at(-1).firstElementChild?.childNodes.length) {
         pageElements.pop().remove();
+      }
+
+      // เก็บข้อความต้นฉบับ ใช้ตรวจว่า Edge แปลหน้านั้นแล้วหรือยัง
+      for (const page of pageElements) {
+        page._orig = page.querySelector(".flow").textContent;
       }
 
       document.querySelectorAll("[data-nav]").forEach(nav => {
@@ -1913,7 +2053,7 @@
 
     function updateLanguage() {
       const language = $("sourceLanguage").value;
-      document.documentElement.lang = language;
+      if (!translatedMode()) document.documentElement.lang = language;
       $("readerArticle").lang = language;
       for (const page of pageElements) page.lang = language;
       stopReading();
