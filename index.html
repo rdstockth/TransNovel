@@ -822,7 +822,7 @@
     const DEFAULT_VOICE_PATTERN = /premwadee/i;
 
     // ดีเลย์ก่อนเลื่อนไปหน้าถัดไปตอนอ่านจบหน้า (มิลลิวินาที)
-    const PAGE_DELAY_MS = 4000;
+    const PAGE_DELAY_MS = 5000;
     // เวลารอสูงสุดให้ Edge แปลหน้าใหม่ก่อนเริ่มอ่าน
     const TRANSLATE_WAIT_MS = 8000;
 
@@ -1611,7 +1611,7 @@
       speakNext(session);
     }
 
-    // อ่านจบหน้า: เลื่อนไปหน้าถัดไปทันที แล้วรอ 4 วินาทีก่อนเริ่มอ่านต่อ
+    // อ่านจบหน้า: เลื่อนไปหน้าถัดไปทันที แล้วหยุดรอ (PAGE_DELAY_MS) ก่อนเริ่มอ่านต่อ
     function advancePage(session, delay = PAGE_DELAY_MS) {
       if (session !== speechSession) return;
 
@@ -1684,7 +1684,7 @@
     }
 
     function skipNext() {
-      // กำลังรอ 4 วินาทีข้ามหน้า: ข้ามการรอแล้วอ่านเลย
+      // กำลังรอก่อนอ่านหน้าใหม่: ข้ามการรอแล้วอ่านเลย
       if (delayPending) {
         clearTimeout(pageDelayTimer);
         delayPending = false;
@@ -2019,9 +2019,51 @@
       renderTimer = setTimeout(() => paginate(currentPage), 180);
     }
 
+    // เปลี่ยนหน้าด้วยมือ: ถ้ากำลังอ่านอยู่ ให้หยุดรอ แล้วอ่านต่อจากหน้าที่เปลี่ยนไป
+    function changePage(index) {
+      const reading = speechItems.length > 0 || speechLoading || delayPending;
+      const before = currentPage;
+      showPage(index);
+
+      if (!reading || currentPage === before) return;
+
+      const session = ++speechSession;
+      const target = currentPage;
+
+      utteranceId++;
+      clearTimeout(pageDelayTimer);
+      if (speechSynthesis.paused) speechSynthesis.resume();
+      speechSynthesis.cancel();
+      setHighlight(null);
+
+      speechItems = [];
+      speechIndex = 0;
+      currentlySpeakingIndex = -1;
+      speechPage = target;
+      pendingPage = target;
+      speechLoading = true;
+      delayPending = true;
+
+      $("pauseBtn").disabled = false;
+      $("stopBtn").disabled = false;
+      $("prevBtn").disabled = false;
+      $("nextBtn").disabled = false;
+      $("pauseBtn").textContent = "พักเสียง";
+
+      setStatus(
+        `เปลี่ยนเป็นหน้า ${target + 1} แล้ว · ` +
+        `จะอ่านต่อใน ${PAGE_DELAY_MS / 1000} วินาที…`
+      );
+
+      pageDelayTimer = setTimeout(() => {
+        delayPending = false;
+        startPage(session, target);
+      }, PAGE_DELAY_MS);
+    }
+
     document.querySelectorAll("[data-go]").forEach(button => {
       button.addEventListener("click", () => {
-        showPage(currentPage + Number(button.dataset.go));
+        changePage(currentPage + Number(button.dataset.go));
       });
     });
 
@@ -2045,8 +2087,8 @@
       if (event.altKey || event.ctrlKey || event.metaKey) return;
       if (event.target.closest("input, select, textarea, dialog")) return;
 
-      if (event.key === "ArrowRight") showPage(currentPage + 1);
-      if (event.key === "ArrowLeft") showPage(currentPage - 1);
+      if (event.key === "ArrowRight") changePage(currentPage + 1);
+      if (event.key === "ArrowLeft") changePage(currentPage - 1);
     });
 
     /* ================= ตั้งค่าอื่น ๆ ================= */
