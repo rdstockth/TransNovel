@@ -331,10 +331,6 @@
 
     .pages { width: 100%; min-width: 0; }
 
-    /*
-      1 หน้า = A4 ต่อกัน 4 แผ่น (210 × 1188)
-      เปลี่ยนจำนวนแผ่น: แก้ aspect-ratio และ background-size
-    */
     .sheet {
       width: min(794px, 100%);
       aspect-ratio: 210 / 1188;
@@ -386,7 +382,6 @@
       padding: 6px;
     }
 
-    /* ป้ายบอกหน้าต้นฉบับของ PDF */
     .flow .source-marker {
       margin: 1.6em 0 1.1em;
       padding-top: .6em;
@@ -409,7 +404,6 @@
       border-radius: 4px;
     }
 
-    /* ---------- มุมมองอ่านต่อเนื่อง (สำหรับ Reading mode ของ Edge) ---------- */
     .topbar .title-block { min-width: 0; }
 
     .topbar-actions {
@@ -437,7 +431,6 @@
       line-height: 1.35;
     }
 
-    /* ใช้สไตล์เนื้อหาเดียวกับ .flow แต่ไหลยาวต่อเนื่อง ไม่ตัดความสูง */
     .reading-flow {
       height: auto;
       overflow: visible;
@@ -600,6 +593,11 @@
         </div>
 
         <div class="setting">
+          <label for="readFromPage">Reading mode เริ่มจากหน้าที่เลือก</label>
+          <input id="readFromPage" type="checkbox" checked>
+        </div>
+
+        <div class="setting">
           <label for="sourceLanguage">ภาษาต้นฉบับ</label>
           <select id="sourceLanguage">
             <option value="en">อังกฤษ</option>
@@ -685,7 +683,6 @@
         <button class="secondary" type="button" data-go="1">ถัดไป →</button>
       </nav>
 
-      <!-- มุมมองต่อเนื่อง: เนื้อหาทั้งเอกสารอยู่ใน <article> เดียว ให้ Reading mode ของ Edge ตรวจพบ -->
       <article id="readerArticle" class="reader-article" hidden>
         <header><h1 id="readerTitle"></h1></header>
         <div id="readerBody" class="flow reading-flow"></div>
@@ -700,10 +697,19 @@
         <small>ใช้ปุ่มลูกศร ← → บนแป้นพิมพ์เพื่อเปลี่ยนหน้าได้</small>
       </nav>
 
+      <!-- ====== Audio Panel: เพิ่มปุ่มข้าม/ย้อนบรรทัด ====== -->
       <section id="audioPanel" class="audio-panel"
         aria-label="เครื่องมืออ่านออกเสียง" lang="th" hidden>
         <button id="playBtn" class="primary" type="button" disabled>
           ▶ อ่านจากหน้านี้
+        </button>
+        <button id="prevBtn" class="secondary" type="button" disabled
+          title="ย้อนบรรทัด (Alt + ←)">
+          ← ย้อนบรรทัด
+        </button>
+        <button id="nextBtn" class="secondary" type="button" disabled
+          title="ข้ามบรรทัด (Alt + →)">
+          ข้ามบรรทัด →
         </button>
         <button id="pauseBtn" class="secondary" type="button" disabled>
           พักเสียง
@@ -776,7 +782,6 @@
     const TESSERACT_URL =
       "https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js";
 
-    // ความละเอียดภาพสำหรับ OCR: สูงขึ้นแม่นขึ้น แต่ช้าและใช้หน่วยความจำมากขึ้น
     const OCR_SCALE = 2.5;
     const OCR_MAX_SIDE = 3500;
 
@@ -816,6 +821,7 @@
     let speechItems = [];
     let speechIndex = 0;
     let speechSession = 0;
+    let currentlySpeakingIndex = -1; // ✨ ตำแหน่งบรรทัดที่กำลังออกเสียงอยู่จริง
     let fileRequest = 0;
     let renderTimer = 0;
     let lastLayoutWidth = 0;
@@ -890,7 +896,6 @@
 
     const THAI = /[\u0E00-\u0E7F]/;
 
-    // ต่อบรรทัดให้เป็นย่อหน้า: ภาษาไทยต่อกันโดยไม่เว้นวรรค
     function joinLines(previous, next) {
       if (/[A-Za-z]-$/.test(previous)) return previous.slice(0, -1) + next;
       if (THAI.test(previous.slice(-1)) && THAI.test(next[0])) {
@@ -992,7 +997,6 @@
       return blocks;
     }
 
-    // หน้าที่ไม่มีข้อความ หรือข้อความเพี้ยนจากฟอนต์ ให้ถือว่าต้องใช้ OCR
     function needsOcr(blocks) {
       const visible = blocks.map(b => b.text).join("").replace(/\s/g, "");
       if (visible.length < 25) return true;
@@ -1051,7 +1055,6 @@
     function cleanOcrLine(line) {
       return line
         .replace(/[ \t]+/g, " ")
-        // Tesseract มักเว้นวรรคระหว่างตัวอักษรไทย
         .replace(/([\u0E00-\u0E7F]) (?=[\u0E00-\u0E7F])/g, "$1")
         .trim();
     }
@@ -1169,7 +1172,6 @@
             const ocrBlocks = await ocrPage(page, worker);
             ocrProgressHandler = null;
 
-            // ใช้ผล OCR เมื่อได้ข้อความ หรือเมื่อผู้ใช้บังคับ OCR
             if (mode === "ocr" || ocrBlocks.length) {
               blocks = ocrBlocks;
               usedOcr = true;
@@ -1220,7 +1222,6 @@
         sourceHtml = "<p>ไม่พบเนื้อหาที่แสดงผลได้</p>";
       }
 
-      // เดาภาษาต้นฉบับ เพื่อช่วยให้ Edge เสนอการแปลได้ถูก
       const template = document.createElement("template");
       template.innerHTML = sourceHtml;
       const guessed = guessLanguage(template.content.textContent || "");
@@ -1244,7 +1245,6 @@
       currentPage = 0;
 
       if (readingView) {
-        // เลย์เอาต์แบ่งหน้าซ่อนอยู่ จึงรอแบ่งหน้าใหม่ตอนกลับมุมมองเดิม
         paginationDirty = true;
         buildReadingArticle();
       } else {
@@ -1480,16 +1480,20 @@
       }
     }
 
+    // ✨ ปรับปรุง stopReading ให้รีเซ็ตตัวแปร skip/prev
     function stopReading() {
       speechSession++;
       speechItems = [];
       speechIndex = 0;
+      currentlySpeakingIndex = -1;
 
       if (speechSupported) speechSynthesis.cancel();
       setHighlight(null);
 
       $("pauseBtn").disabled = true;
       $("stopBtn").disabled = true;
+      $("prevBtn").disabled = true;
+      $("nextBtn").disabled = true;
       $("pauseBtn").textContent = "พักเสียง";
     }
 
@@ -1500,7 +1504,6 @@
         if (pageIndex < fromPage) return;
 
         for (const block of page.querySelector(".flow").children) {
-          // ข้ามป้ายบอกหน้า PDF
           if (block.classList.contains("source-marker")) continue;
 
           for (const text of splitSpeech(block.textContent, language)) {
@@ -1512,15 +1515,18 @@
       return items;
     }
 
+    // ✨ ปรับปรุง speakNext ให้จัดการ cancel/interrupted
     function speakNext(session) {
       if (session !== speechSession) return;
 
       if (speechIndex >= speechItems.length) {
+        currentlySpeakingIndex = -1;
         stopReading();
         setStatus("อ่านเอกสารจบแล้ว");
         return;
       }
 
+      currentlySpeakingIndex = speechIndex;
       const item = speechItems[speechIndex++];
       const voice = resolveVoice();
       const utterance = new SpeechSynthesisUtterance(item.text);
@@ -1539,14 +1545,54 @@
       utterance.onend = () => speakNext(session);
       utterance.onerror = event => {
         if (session !== speechSession) return;
-        stopReading();
-
-        if (!["canceled", "interrupted"].includes(event.error)) {
-          setStatus("อ่านออกเสียงไม่สำเร็จ กรุณาตรวจสอบอินเทอร์เน็ตหรือลองเลือกเสียงอื่น");
+        // ✨ ถ้าเป็นการ cancel เพื่อ skip (canceled/interrupted) ให้ข้ามไป ไม่ต้องหยุดทั้งหมด
+        if (["canceled", "interrupted"].includes(event.error)) {
+          return;
         }
+        stopReading();
+        setStatus("อ่านออกเสียงไม่สำเร็จ กรุณาตรวจสอบอินเทอร์เน็ตหรือลองเลือกเสียงอื่น");
       };
 
       speechSynthesis.speak(utterance);
+    }
+
+    // ✨ ฟังก์ชันข้ามบรรทัด
+    function skipNext() {
+      if (speechItems.length === 0) {
+        setStatus("ยังไม่มีอะไรให้อ่าน กด «▶ อ่านจากหน้านี้» ก่อน");
+        return;
+      }
+
+      if (currentlySpeakingIndex >= speechItems.length - 1) {
+        setStatus("⏭ อยู่บรรทัดสุดท้ายแล้ว");
+        return;
+      }
+
+      speechSynthesis.cancel();
+      speechIndex = currentlySpeakingIndex + 1;
+      setStatus(`ข้ามไปยังบรรทัดที่ ${speechIndex + 1}`);
+      setTimeout(() => speakNext(speechSession), 30);
+    }
+
+    // ✨ ฟังก์ชันย้อนบรรทัด
+    function goPrev() {
+      if (speechItems.length === 0) {
+        setStatus("ยังไม่มีอะไรให้อ่าน กด «▶ อ่านจากหน้านี้» ก่อน");
+        return;
+      }
+
+      if (currentlySpeakingIndex <= 0) {
+        speechSynthesis.cancel();
+        speechIndex = 0;
+        setStatus("⏮ อยู่บรรทัดแรกแล้ว");
+        setTimeout(() => speakNext(speechSession), 30);
+        return;
+      }
+
+      speechSynthesis.cancel();
+      speechIndex = currentlySpeakingIndex - 1;
+      setStatus(`ย้อนไปยังบรรทัดที่ ${speechIndex + 1}`);
+      setTimeout(() => speakNext(speechSession), 30);
     }
 
     $("playBtn").addEventListener("click", () => {
@@ -1564,6 +1610,8 @@
 
       $("pauseBtn").disabled = false;
       $("stopBtn").disabled = false;
+      $("prevBtn").disabled = false; // ✨ เปิดใช้งานเมื่อกดอ่าน
+      $("nextBtn").disabled = false; // ✨ เปิดใช้งานเมื่อกดอ่าน
       setStatus(`กำลังอ่านออกเสียงด้วย ${voice?.name || "เสียงเริ่มต้นของระบบ"}`);
       speakNext(speechSession);
     });
@@ -1584,6 +1632,10 @@
       stopReading();
       setStatus("หยุดอ่านออกเสียงแล้ว");
     });
+
+    // ✨ เชื่อมปุ่มข้าม/ย้อนบรรทัด
+    $("prevBtn").addEventListener("click", goPrev);
+    $("nextBtn").addEventListener("click", skipNext);
 
     $("rateInput").addEventListener("input", event => {
       $("rateValue").textContent = `${Number(event.target.value).toFixed(2)}×`;
@@ -1766,7 +1818,6 @@
     function paginate(keepPage = 0) {
       if (!sourceHtml) return;
 
-      // ตอนอยู่มุมมองต่อเนื่อง หน้าถูกซ่อน (วัดความสูงไม่ได้) จึงเลื่อนไปแบ่งทีหลัง
       if (readingView) {
         paginationDirty = true;
         return;
@@ -1818,7 +1869,23 @@
       });
     });
 
+    // ✨ ปรับปรุง keydown ให้รองรับ Alt+←/→ สำหรับ skip/prev
     document.addEventListener("keydown", event => {
+      // คีย์ลัดข้าม/ย้อนบรรทัด (ต้องกด Alt ค้าง)
+      if (event.altKey && speechItems.length > 0) {
+        if (event.key === "ArrowRight") {
+          event.preventDefault();
+          skipNext();
+          return;
+        }
+        if (event.key === "ArrowLeft") {
+          event.preventDefault();
+          goPrev();
+          return;
+        }
+      }
+
+      // คีย์ลัดเปลี่ยนหน้า (ไม่มี modifier)
       if (readingView || !pageElements.length) return;
       if (event.altKey || event.ctrlKey || event.metaKey) return;
       if (event.target.closest("input, select, textarea, dialog")) return;
@@ -1837,15 +1904,46 @@
       stopReading();
     }
 
-    /* ============ มุมมองอ่านต่อเนื่อง สำหรับ Reading mode ของ Edge ============
-       Edge ตรวจเฉพาะเนื้อหาที่มองเห็นอยู่ในหน้า แต่มุมมองแบ่งหน้าซ่อนหน้าอื่นไว้
-       จึงสร้าง <article> เดียวที่มีเนื้อหาทั้งเอกสารไว้ให้ Edge อ่าน */
+    function trimBeforeOffset(content, offset) {
+      let position = 0;
+
+      for (const block of [...content.children]) {
+        const length = block.textContent.length;
+        const before = position + length <= offset &&
+          !(length === 0 && position === offset);
+
+        if (before) {
+          block.remove();
+          position += length;
+          continue;
+        }
+
+        if (position < offset && length > 0) {
+          block.replaceWith(
+            sliceBlock(block, offset - position, length, getTextNodes(block))
+          );
+        }
+        break;
+      }
+    }
 
     function buildReadingArticle() {
       const template = document.createElement("template");
-      template.innerHTML = sourceHtml; // ผ่าน DOMPurify แล้วใน renderDocument
+      template.innerHTML = sourceHtml;
 
-      // ป้าย «— PDF 3 / 10 —» ไม่ควรถูกอ่านออกเสียงหรือแสดงใน Reading mode
+      const startPage =
+        $("readFromPage").checked && !paginationDirty && pageElements.length
+          ? Math.min(currentPage, pageElements.length - 1)
+          : 0;
+
+      if (startPage > 0) {
+        let before = 0;
+        for (let i = 0; i < startPage; i++) {
+          before += pageElements[i].querySelector(".flow").textContent.length;
+        }
+        trimBeforeOffset(template.content, before);
+      }
+
       for (const marker of template.content.querySelectorAll("p.source-marker")) {
         const divider = document.createElement("hr");
         divider.className = "source-break";
@@ -1853,7 +1951,9 @@
         marker.replaceWith(divider);
       }
 
-      $("readerTitle").textContent = $("documentTitle").textContent;
+      $("readerTitle").textContent = startPage > 0
+        ? `${$("documentTitle").textContent} (เริ่มจากหน้า ${startPage + 1})`
+        : $("documentTitle").textContent;
       $("readerArticle").lang = $("sourceLanguage").value;
       $("readerBody").replaceChildren(template.content);
     }
@@ -1877,7 +1977,6 @@
       if (enabled) {
         buildReadingArticle();
         window.scrollTo({ top: 0 });
-        // บังคับให้เบราว์เซอร์คำนวณเลย์เอาต์ทันที เผื่อ Edge ตรวจหน้าต่อจากนี้
         void $("readerArticle").offsetHeight;
         setStatus("อยู่ในมุมมองอ่านต่อเนื่อง · กด F9 หรือคลิกไอคอนหนังสือที่แถบที่อยู่ของ Edge");
       } else {
@@ -1896,11 +1995,14 @@
       setReadingView(!readingView);
     });
 
+    $("readFromPage").addEventListener("change", () => {
+      if (readingView) buildReadingArticle();
+    });
+
     $("readingHelpBtn").addEventListener("click", () => {
       $("readingDialog").showModal();
     });
 
-    // F9 คือทางลัด Reading mode ของ Edge: สลับมุมมองให้ก่อน (ไม่ขวางการทำงานของ Edge)
     document.addEventListener("keydown", event => {
       if (event.key === "F9" && sourceHtml && !readingView) {
         setReadingView(true);
@@ -1998,6 +2100,8 @@
     } else {
       voiceSelect.disabled = true;
       $("rateInput").disabled = true;
+      $("prevBtn").disabled = true;
+      $("nextBtn").disabled = true;
       updateVoiceHint();
     }
   </script>
