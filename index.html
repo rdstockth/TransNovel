@@ -23,6 +23,8 @@
       --guide: #c9cfdd;
       --highlight: #fff3b8;
       --reader-size: 17px;
+      --line-height: 1.7;
+      --page-lines: 50;
     }
 
     body.dark {
@@ -333,36 +335,32 @@
 
     .sheet {
       width: min(794px, 100%);
-      aspect-ratio: 210 / 1188;
       margin: 0 auto;
       padding: clamp(20px, 5vw, 65px);
       border: 1px solid var(--border);
       background-color: var(--paper);
-      background-image: linear-gradient(
-        to bottom,
-        transparent calc(100% - 1px),
-        var(--guide) calc(100% - 1px)
-      );
-      background-size: 100% 25%;
-      background-origin: border-box;
-      background-repeat: repeat-y;
       box-shadow: 0 18px 55px rgb(25 32 63 / 10%);
       overflow: hidden;
     }
 
-    body.no-guides .sheet { background-image: none; }
     .sheet[hidden] { display: none; }
 
     .flow {
       width: 100%;
-      height: 100%;
+      height: calc(var(--reader-size) * var(--line-height) * var(--page-lines));
       overflow-y: auto;
       overflow-x: hidden;
       font-size: var(--reader-size);
-      line-height: 1.7;
+      line-height: var(--line-height);
       overflow-wrap: anywhere;
       scrollbar-width: thin;
+      /* เส้นบอกทุก 10 บรรทัด */
+      background-image: linear-gradient(to bottom, transparent calc(100% - 1px), var(--guide) 0);
+      background-size: 100% calc(var(--reader-size) * var(--line-height) * 10);
+      background-attachment: local;
     }
+
+    body.no-guides .flow { background-image: none; }
 
     .flow > :first-child { margin-top: 0; }
     .flow h1, .flow h2, .flow h3 { line-height: 1.35; }
@@ -434,6 +432,7 @@
     .reading-flow {
       height: auto;
       overflow: visible;
+      background-image: none;
     }
 
     .flow hr.source-break {
@@ -502,8 +501,8 @@
     }
 
     @media (max-width: 560px) {
+      :root { --line-height: 1.55; }
       .topbar { flex-wrap: wrap; }
-      .flow { line-height: 1.55; }
       .sheet { padding: 20px; }
       .audio-panel { bottom: 7px; }
     }
@@ -517,7 +516,7 @@
   </style>
 </head>
 
-<body>
+<body class="dark">
   <div class="app">
     <aside class="sidebar" lang="th">
       <div class="sidebar-inner">
@@ -583,12 +582,12 @@
           <label for="themeSelect">ธีม</label>
           <select id="themeSelect">
             <option value="light">สว่าง</option>
-            <option value="dark">มืด</option>
+            <option value="dark" selected>มืด</option>
           </select>
         </div>
 
         <div class="setting">
-          <label for="guideToggle">เส้นแบ่ง A4</label>
+          <label for="guideToggle">เส้นบอกทุก 10 บรรทัด</label>
           <input id="guideToggle" type="checkbox" checked>
         </div>
 
@@ -672,8 +671,8 @@
         <div class="welcome-icon" aria-hidden="true">▤</div>
         <h2>อ่านเอกสารทีละหน้า</h2>
         <p>
-          เปิดไฟล์ Word, PDF หรือ PDF สแกน แล้วอ่านในหน้ายาว
-          ประมาณ A4 สี่แผ่น พร้อมฟังเสียงอ่านด้วย Premwadee
+          เปิดไฟล์ Word, PDF หรือ PDF สแกน แล้วอ่านในหน้าละประมาณ 50 บรรทัด
+          พร้อมฟังเสียงอ่านด้วย Premwadee
         </p>
       </div>
 
@@ -697,7 +696,7 @@
         <small>ใช้ปุ่มลูกศร ← → บนแป้นพิมพ์เพื่อเปลี่ยนหน้าได้</small>
       </nav>
 
-      <!-- ====== Audio Panel: เพิ่มปุ่มข้าม/ย้อนบรรทัด ====== -->
+      <!-- ====== Audio Panel ====== -->
       <section id="audioPanel" class="audio-panel"
         aria-label="เครื่องมืออ่านออกเสียง" lang="th" hidden>
         <button id="playBtn" class="primary" type="button" disabled>
@@ -812,6 +811,9 @@
 
     const DEFAULT_VOICE_PATTERN = /premwadee/i;
 
+    // ดีเลย์ก่อนเลื่อนไปหน้าถัดไปตอนอ่านจบหน้า (มิลลิวินาที)
+    const PAGE_DELAY_MS = 4000;
+
     let sourceHtml = "";
     let fontSize = 17;
     let currentPage = 0;
@@ -821,7 +823,8 @@
     let speechItems = [];
     let speechIndex = 0;
     let speechSession = 0;
-    let currentlySpeakingIndex = -1; // ✨ ตำแหน่งบรรทัดที่กำลังออกเสียงอยู่จริง
+    let currentlySpeakingIndex = -1;
+    let pageDelayTimer = 0;
     let fileRequest = 0;
     let renderTimer = 0;
     let lastLayoutWidth = 0;
@@ -1256,7 +1259,7 @@
       setStatus(
         readingView
           ? "เปิดเอกสารในมุมมองอ่านต่อเนื่อง · กด F9 เพื่อเปิด Reading mode ของ Edge"
-          : `แบ่งเป็น ${pageElements.length} หน้า (A4 × 4)`
+          : `แบ่งเป็น ${pageElements.length} หน้า (หน้าละประมาณ 50 บรรทัด)`
       );
 
       if (note) setStatus($("status").textContent + ` · ${note}`);
@@ -1480,9 +1483,9 @@
       }
     }
 
-    // ✨ ปรับปรุง stopReading ให้รีเซ็ตตัวแปร skip/prev
     function stopReading() {
       speechSession++;
+      clearTimeout(pageDelayTimer);
       speechItems = [];
       speechIndex = 0;
       currentlySpeakingIndex = -1;
@@ -1515,8 +1518,7 @@
       return items;
     }
 
-    // ✨ ปรับปรุง speakNext ให้จัดการ cancel/interrupted
-    function speakNext(session) {
+    function speakNext(session, immediate = false) {
       if (session !== speechSession) return;
 
       if (speechIndex >= speechItems.length) {
@@ -1526,8 +1528,24 @@
         return;
       }
 
-      currentlySpeakingIndex = speechIndex;
-      const item = speechItems[speechIndex++];
+      const item = speechItems[speechIndex];
+      const previous = speechItems[speechIndex - 1];
+
+      // ขึ้นหน้าใหม่: รอ 4 วินาที แล้วค่อยเลื่อนหน้าและอ่านต่อ
+      if (!immediate && previous && previous.pageIndex !== item.pageIndex) {
+        setHighlight(null);
+        setStatus(
+          `จบหน้า ${previous.pageIndex + 1} แล้ว · ` +
+          `จะเลื่อนไปหน้า ${item.pageIndex + 1} ใน ${PAGE_DELAY_MS / 1000} วินาที…`
+        );
+        clearTimeout(pageDelayTimer);
+        pageDelayTimer = setTimeout(() => speakNext(session, true), PAGE_DELAY_MS);
+        return;
+      }
+
+      speechIndex++;
+      currentlySpeakingIndex = speechIndex - 1;
+
       const voice = resolveVoice();
       const utterance = new SpeechSynthesisUtterance(item.text);
 
@@ -1538,6 +1556,7 @@
 
       if (item.pageIndex !== currentPage) {
         showPage(item.pageIndex, false);
+        setStatus(`กำลังอ่านออกเสียง · หน้า ${item.pageIndex + 1}`);
       }
 
       setHighlight(item.element);
@@ -1545,10 +1564,7 @@
       utterance.onend = () => speakNext(session);
       utterance.onerror = event => {
         if (session !== speechSession) return;
-        // ✨ ถ้าเป็นการ cancel เพื่อ skip (canceled/interrupted) ให้ข้ามไป ไม่ต้องหยุดทั้งหมด
-        if (["canceled", "interrupted"].includes(event.error)) {
-          return;
-        }
+        if (["canceled", "interrupted"].includes(event.error)) return;
         stopReading();
         setStatus("อ่านออกเสียงไม่สำเร็จ กรุณาตรวจสอบอินเทอร์เน็ตหรือลองเลือกเสียงอื่น");
       };
@@ -1556,7 +1572,6 @@
       speechSynthesis.speak(utterance);
     }
 
-    // ✨ ฟังก์ชันข้ามบรรทัด
     function skipNext() {
       if (speechItems.length === 0) {
         setStatus("ยังไม่มีอะไรให้อ่าน กด «▶ อ่านจากหน้านี้» ก่อน");
@@ -1568,13 +1583,13 @@
         return;
       }
 
+      clearTimeout(pageDelayTimer);
       speechSynthesis.cancel();
       speechIndex = currentlySpeakingIndex + 1;
       setStatus(`ข้ามไปยังบรรทัดที่ ${speechIndex + 1}`);
-      setTimeout(() => speakNext(speechSession), 30);
+      setTimeout(() => speakNext(speechSession, true), 30);
     }
 
-    // ✨ ฟังก์ชันย้อนบรรทัด
     function goPrev() {
       if (speechItems.length === 0) {
         setStatus("ยังไม่มีอะไรให้อ่าน กด «▶ อ่านจากหน้านี้» ก่อน");
@@ -1582,17 +1597,19 @@
       }
 
       if (currentlySpeakingIndex <= 0) {
+        clearTimeout(pageDelayTimer);
         speechSynthesis.cancel();
         speechIndex = 0;
         setStatus("⏮ อยู่บรรทัดแรกแล้ว");
-        setTimeout(() => speakNext(speechSession), 30);
+        setTimeout(() => speakNext(speechSession, true), 30);
         return;
       }
 
+      clearTimeout(pageDelayTimer);
       speechSynthesis.cancel();
       speechIndex = currentlySpeakingIndex - 1;
       setStatus(`ย้อนไปยังบรรทัดที่ ${speechIndex + 1}`);
-      setTimeout(() => speakNext(speechSession), 30);
+      setTimeout(() => speakNext(speechSession, true), 30);
     }
 
     $("playBtn").addEventListener("click", () => {
@@ -1610,8 +1627,8 @@
 
       $("pauseBtn").disabled = false;
       $("stopBtn").disabled = false;
-      $("prevBtn").disabled = false; // ✨ เปิดใช้งานเมื่อกดอ่าน
-      $("nextBtn").disabled = false; // ✨ เปิดใช้งานเมื่อกดอ่าน
+      $("prevBtn").disabled = false;
+      $("nextBtn").disabled = false;
       setStatus(`กำลังอ่านออกเสียงด้วย ${voice?.name || "เสียงเริ่มต้นของระบบ"}`);
       speakNext(speechSession);
     });
@@ -1633,7 +1650,6 @@
       setStatus("หยุดอ่านออกเสียงแล้ว");
     });
 
-    // ✨ เชื่อมปุ่มข้าม/ย้อนบรรทัด
     $("prevBtn").addEventListener("click", goPrev);
     $("nextBtn").addEventListener("click", skipNext);
 
@@ -1848,7 +1864,7 @@
       });
 
       showPage(keepPage, false);
-      setStatus(`แบ่งเอกสารเป็น ${pageElements.length} หน้า (หน้าละประมาณ A4 × 4)`);
+      setStatus(`แบ่งเอกสารเป็น ${pageElements.length} หน้า (หน้าละประมาณ 50 บรรทัด)`);
     }
 
     function schedulePagination() {
@@ -1869,7 +1885,6 @@
       });
     });
 
-    // ✨ ปรับปรุง keydown ให้รองรับ Alt+←/→ สำหรับ skip/prev
     document.addEventListener("keydown", event => {
       // คีย์ลัดข้าม/ย้อนบรรทัด (ต้องกด Alt ค้าง)
       if (event.altKey && speechItems.length > 0) {
