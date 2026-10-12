@@ -798,6 +798,13 @@ try {
             ประมวลผล PDF ใหม่
           </button>
 
+          <p class="section-label">DOCX</p>
+
+          <div class="setting">
+            <label for="docxStripImages">ไม่แสดงรูปภาพ</label>
+            <input id="docxStripImages" type="checkbox" checked>
+          </div>
+
           <p class="section-label">เสียงอ่าน</p>
 
           <div class="setting">
@@ -1243,6 +1250,7 @@ try {
           pageLength: $("pageLength").value,
           pdfMode: $("pdfMode").value,
           ocrLang: $("ocrLang").value,
+          docxStripImages: $("docxStripImages").checked,
           sourceLanguage: $("sourceLanguage").value,
           voiceMode: $("voiceMode").value,
           readFromPage: $("readFromPage").checked,
@@ -1468,18 +1476,47 @@ try {
 
     /* ================= แปลงไฟล์ ================= */
 
+    /* mammoth อ่านเฉพาะเนื้อหาหลัก จึงไม่ดึง Header/Footer ของ Word มาอยู่แล้ว
+       ส่วนรูปภาพกรองตามตัวเลือก (ค่าเริ่มต้น: กรองออก) */
+    function stripDocxImages(html) {
+      const template = document.createElement("template");
+      template.innerHTML = html;
+
+      template.content.querySelectorAll("img").forEach(img => img.remove());
+
+      // ลบย่อหน้า/หัวข้อที่ว่างเปล่าหลังเอารูปออก
+      template.content.querySelectorAll("p, h1, h2, h3, h4, h5, h6").forEach(el => {
+        if (!el.textContent.trim() && !el.children.length) el.remove();
+      });
+
+      return template.innerHTML;
+    }
+
     async function convertDocx(file) {
       if (!window.mammoth) throw new Error("LIBRARY_LOAD_FAILED");
 
+      const stripImages = $("docxStripImages").checked;
+
       setProgress(0.35, "กำลังเปิดไฟล์ Word…", file.name);
       const buffer = await file.arrayBuffer();
-      const result = await mammoth.convertToHtml({ arrayBuffer: buffer });
+
+      const options = { arrayBuffer: buffer };
+      if (stripImages) {
+        // ไม่อ่านข้อมูลรูป (ไม่แปลงเป็น base64) เพื่อให้เร็วขึ้นและเบาลง
+        options.convertImage = mammoth.images.imgElement(
+          () => Promise.resolve({ src: "" })
+        );
+      }
+
+      const result = await mammoth.convertToHtml(options);
+      const html = stripImages ? stripDocxImages(result.value) : result.value;
 
       return {
-        html: result.value,
-        note: result.messages.length
+        html,
+        note: (result.messages.length
           ? "ไฟล์ Word (รูปแบบบางส่วนอาจต่างจากต้นฉบับ)"
-          : "ไฟล์ Word"
+          : "ไฟล์ Word") +
+          (stripImages ? " · ไม่แสดงรูปภาพ" : "")
       };
     }
 
@@ -2747,6 +2784,15 @@ try {
       });
 
       $("ocrLang").addEventListener("change", saveSettings);
+
+      $("docxStripImages").checked = saved.docxStripImages !== false; // เปิดเป็นค่าเริ่มต้น
+
+      $("docxStripImages").addEventListener("change", () => {
+        saveSettings();
+        if (lastFile && lastFile.name.toLowerCase().endsWith(".docx")) {
+          openFile(lastFile); // ประมวลผล DOCX ใหม่ตามตัวเลือก
+        }
+      });
 
       $("sourceLanguage").addEventListener("change", () => {
         updateLanguage();
