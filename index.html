@@ -1,556 +1,727 @@
 <!doctype html>
 <html lang="th">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>อ่านสบาย — DOCX & PDF Reader</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>อ่านสบาย — DOCX & PDF Reader</title>
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#eef1f8">
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#101422">
+<meta name="description" content="อ่านไฟล์ DOCX และ PDF ทีละหน้า พร้อมเสียงอ่านภาษาไทย ไฮไลต์ข้อความ และ OCR สำหรับ PDF สแกน — ประมวลผลในเบราว์เซอร์ทั้งหมด">
 
-  <script src="https://cdn.jsdelivr.net/npm/mammoth@1.9.0/mammoth.browser.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/dompurify@3.2.6/dist/purify.min.js"></script>
-  <!-- pdf.js และ Tesseract.js จะโหลดเมื่อเปิด PDF เท่านั้น -->
+<script>
+/* ตั้งธีมให้เร็วที่สุดก่อนเรนเดอร์ (กันจอกะพริบ) */
+try {
+  var __s = JSON.parse(localStorage.getItem("aun-sabai-v1") || "{}");
+  var __t = __s.theme || "auto";
+  if (__t === "dark" || (__t !== "light" && matchMedia("(prefers-color-scheme: dark)").matches)) {
+    document.documentElement.classList.add("dark");
+  }
+} catch (e) {}
+</script>
 
-  <style>
-    :root {
-      font-family: "Segoe UI", system-ui, sans-serif;
-      --bg: #f3f5fa;
-      --panel: #fff;
-      --paper: #fff;
-      --text: #20263a;
-      --muted: #657189;
-      --border: #e1e6ef;
-      --accent: #6357d9;
-      --soft: #efedff;
-      --guide: #c9cfdd;
-      --highlight: #fff3b8;
-      --reader-size: 17px;
-      --line-height: 1.7;
-      --page-lines: 50;
-    }
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@400;500;600;700;800&family=Noto+Serif+Thai:wght@400;500;600;700&display=swap" rel="stylesheet">
 
-    body.dark {
-      color-scheme: dark;
-      --bg: #121522;
-      --panel: #1c2131;
-      --paper: #252b3b;
-      --text: #f0f2f8;
-      --muted: #abb5c9;
-      --border: #384057;
-      --accent: #aaa0ff;
-      --soft: #353253;
-      --guide: #48506a;
-      --highlight: #4a4425;
-    }
+<script src="https://cdn.jsdelivr.net/npm/mammoth@1.9.0/mammoth.browser.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/dompurify@3.2.6/dist/purify.min.js"></script>
+<!-- pdf.js และ Tesseract.js จะโหลดเมื่อเปิด PDF เท่านั้น -->
 
-    * { box-sizing: border-box; }
+<style>
+  /* ================= ธีม ================= */
+  :root {
+    --font-ui: "Noto Sans Thai", "Segoe UI", system-ui, sans-serif;
+    --font-doc: "Noto Serif Thai", "Sarabun", Georgia, serif;
 
-    body {
-      margin: 0;
-      background: var(--bg);
-      color: var(--text);
-    }
+    --bg: #eef1f8;
+    --bg-glow: rgba(90, 79, 216, .10);
+    --panel: #ffffff;
+    --paper: #ffffff;
+    --panel-glass: rgba(255, 255, 255, .88);
+    --text: #21263a;
+    --muted: #66718d;
+    --border: #e2e6f0;
+    --accent: #5a4fd8;
+    --accent-strong: #483bc2;
+    --accent-contrast: #ffffff;
+    --accent-soft: #ecebff;
+    --guide: #ccd3e4;
+    --highlight: #ffee9d;
+    --danger: #d64550;
+    --drop-border: #b9b0f2;
+    --shadow-sm: 0 4px 14px rgb(24 31 66 / 8%);
+    --shadow-lg: 0 18px 50px rgb(24 31 66 / 13%);
 
-    button, select, input { font: inherit; }
-    button { cursor: pointer; color: inherit; }
-    button:disabled { opacity: .45; cursor: not-allowed; }
+    --reader-size: 17px;
+    --line-height: 1.75;
+    --page-lines: 50;
 
-    :is(button, select, input, .dropzone):focus-visible {
-      outline: 3px solid var(--accent);
-      outline-offset: 3px;
-    }
+    color-scheme: light;
+  }
 
-    .app {
-      max-width: 1500px;
-      min-height: 100vh;
-      margin: auto;
-      display: grid;
-      grid-template-columns: 300px minmax(0, 1fr);
-    }
+  html.dark {
+    --bg: #101422;
+    --bg-glow: rgba(150, 140, 255, .09);
+    --panel: #171d2f;
+    --paper: #1f2537;
+    --panel-glass: rgba(20, 25, 41, .9);
+    --text: #edf0f9;
+    --muted: #9ba7c4;
+    --border: #2b3350;
+    --accent: #a397ff;
+    --accent-strong: #8d80ff;
+    --accent-contrast: #161230;
+    --accent-soft: #262b4a;
+    --guide: #3b4566;
+    --highlight: #575031;
+    --danger: #ff7b84;
+    --drop-border: #4c4580;
+    --shadow-sm: 0 4px 14px rgb(0 0 0 / 35%);
+    --shadow-lg: 0 18px 50px rgb(0 0 0 / 45%);
 
-    /* ---------- Sidebar ---------- */
+    color-scheme: dark;
+  }
+
+  /* ================= พื้นฐาน ================= */
+  * { box-sizing: border-box; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    font-family: var(--font-ui);
+    color: var(--text);
+    background:
+      radial-gradient(900px 520px at 85% -10%, var(--bg-glow), transparent 65%),
+      radial-gradient(720px 440px at -10% 110%, var(--bg-glow), transparent 60%),
+      var(--bg);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  ::selection { background: var(--accent); color: var(--accent-contrast); }
+
+  button, select, input { font: inherit; }
+  button { cursor: pointer; color: inherit; }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+
+  :is(button, select, input, .dropzone):focus-visible {
+    outline: 3px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  /* display:none ต้องชนะทุกกฎ (ยกเว้น .sheet[hidden] ที่ต้องซ่อนแบบพิเศษ) */
+  [hidden] { display: none !important; }
+
+  .secondary {
+    padding: 9px 14px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--panel);
+    transition: background .15s, border-color .15s, transform .05s;
+  }
+  .secondary:hover:not(:disabled) { background: var(--accent-soft); border-color: var(--accent); }
+  .secondary:active:not(:disabled) { transform: translateY(1px); }
+
+  .primary {
+    padding: 10px 18px;
+    border: 0;
+    border-radius: 11px;
+    background: linear-gradient(135deg, var(--accent), var(--accent-strong));
+    color: var(--accent-contrast);
+    font-weight: 700;
+    box-shadow: var(--shadow-sm);
+    transition: filter .15s, transform .05s;
+    white-space: nowrap;
+  }
+  .primary:hover:not(:disabled) { filter: brightness(1.08); }
+  .primary:active:not(:disabled) { transform: translateY(1px); }
+
+  /* ================= โครงหน้า ================= */
+  .app {
+    max-width: 1560px;
+    min-height: 100vh;
+    margin: auto;
+    display: grid;
+    grid-template-columns: 320px minmax(0, 1fr);
+  }
+
+  /* ---------- Sidebar ---------- */
+  .sidebar {
+    padding: 26px 22px 40px;
+    background: var(--panel);
+    border-right: 1px solid var(--border);
+  }
+
+  .sidebar-inner {
+    position: sticky;
+    top: 0;
+    max-height: 100vh;
+    overflow-y: auto;
+    scrollbar-width: thin;
+  }
+
+  .brand { display: flex; align-items: center; gap: 12px; margin-bottom: 22px; }
+  .brand-icon {
+    display: grid; place-items: center;
+    flex: none;
+    width: 44px; height: 44px;
+    border-radius: 14px;
+    background: linear-gradient(135deg, var(--accent), var(--accent-strong));
+    color: var(--accent-contrast);
+    font-size: 21px;
+    box-shadow: var(--shadow-sm);
+  }
+  .brand strong { display: block; font-size: 19px; }
+  .brand small { color: var(--muted); font-size: 12px; }
+
+  .dropzone {
+    display: block;
+    padding: 22px 16px;
+    border: 2px dashed var(--drop-border);
+    border-radius: 16px;
+    background: var(--accent-soft);
+    text-align: center;
+    cursor: pointer;
+    line-height: 1.6;
+    user-select: none;
+    transition: transform .18s, border-color .18s, background .18s;
+  }
+  .dropzone:hover, .dropzone.dragover {
+    transform: translateY(-2px);
+    border-color: var(--accent);
+  }
+  .dropzone.dragover { background: var(--panel); }
+
+  .drop-icon {
+    display: grid; place-items: center;
+    width: 46px; height: 46px;
+    margin: 0 auto 8px;
+    border-radius: 50%;
+    background: var(--panel);
+    color: var(--accent);
+    font-size: 20px;
+    box-shadow: var(--shadow-sm);
+  }
+  .dropzone strong { display: block; font-size: 15px; }
+  .dropzone small { display: block; color: var(--muted); font-size: 12px; }
+
+  .file-badges { display: flex; justify-content: center; gap: 6px; margin-top: 10px; }
+  .file-badges span {
+    padding: 2px 9px;
+    border-radius: 99px;
+    background: var(--panel);
+    color: var(--accent);
+    font-size: 11px;
+    font-weight: 700;
+    box-shadow: var(--shadow-sm);
+  }
+
+  .file-input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+
+  .file-card {
+    margin-top: 14px;
+    padding: 12px 14px;
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 12px;
+    background: var(--bg);
+  }
+  .file-card strong { display: block; font-size: 13.5px; overflow-wrap: anywhere; }
+  .file-card small { color: var(--muted); font-size: 12px; }
+
+  .settings-toggle {
+    display: none;
+    width: 100%;
+    margin-top: 14px;
+    justify-content: center;
+  }
+
+  .section-label {
+    margin: 24px 0 4px;
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: .09em;
+  }
+
+  .setting {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .setting > label { color: var(--muted); font-size: 14px; }
+  .setting select {
+    max-width: 168px;
+    padding: 8px 10px;
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    background: var(--panel);
+    color: var(--text);
+  }
+  .setting input[type="checkbox"] { width: 19px; height: 19px; accent-color: var(--accent); }
+
+  .stepper { display: flex; align-items: center; gap: 6px; }
+  .stepper output { min-width: 46px; text-align: center; font-size: 13px; font-weight: 600; }
+  .stepper button { min-width: 34px; padding: 7px 0; }
+
+  .full { width: 100%; margin-top: 12px; }
+
+  .help {
+    margin-top: 12px;
+    padding: 13px 14px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--accent-soft);
+    font-size: 13px;
+    line-height: 1.7;
+  }
+  .help p { margin: 0 0 10px; }
+  .help .secondary { padding: 7px 12px; font-size: 13px; }
+
+  .note { margin-top: 18px; color: var(--muted); font-size: 12px; line-height: 1.7; }
+
+  /* ---------- Main ---------- */
+  .main { min-width: 0; padding: 26px clamp(14px, 4vw, 56px) 90px; }
+
+  .topbar {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 8px;
+  }
+  .title-block { min-width: 0; }
+  .eyebrow { color: var(--accent); font-size: 11.5px; font-weight: 800; letter-spacing: .14em; }
+  .topbar h1 { margin: 4px 0 0; font-size: clamp(22px, 3vw, 30px); overflow-wrap: anywhere; }
+  .topbar-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+
+  #status { min-height: 22px; margin: 0 0 16px; color: var(--muted); font-size: 14px; }
+  #status.error { color: var(--danger); font-weight: 600; }
+
+  /* ---------- หน้าต้อนรับ ---------- */
+  .welcome {
+    max-width: 560px;
+    margin: 48px auto;
+    padding: 34px 30px;
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    background: var(--panel);
+    box-shadow: var(--shadow-lg);
+    text-align: center;
+    line-height: 1.7;
+  }
+  .welcome-icon {
+    display: grid; place-items: center;
+    width: 64px; height: 64px;
+    margin: 0 auto 12px;
+    border-radius: 20px;
+    background: var(--accent-soft);
+    color: var(--accent);
+    font-size: 30px;
+  }
+  .welcome h2 { margin: 0 0 6px; }
+  .welcome > p { margin: 0 0 22px; color: var(--muted); }
+
+  .feature-list {
+    list-style: none;
+    margin: 0 0 24px;
+    padding: 0;
+    text-align: left;
+    display: grid;
+    gap: 10px;
+  }
+  .feature-list li {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 14px;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+  }
+  .feature-list li > span {
+    display: grid; place-items: center;
+    flex: none;
+    width: 40px; height: 40px;
+    border-radius: 12px;
+    background: var(--accent-soft);
+    font-size: 19px;
+  }
+  .feature-list strong { display: block; font-size: 14px; }
+  .feature-list small { color: var(--muted); font-size: 12.5px; }
+
+  /* ---------- ความคืบหน้า ---------- */
+  .progress-panel {
+    max-width: 794px;
+    margin: 0 auto 18px;
+    padding: 16px 18px;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    background: var(--panel);
+    box-shadow: var(--shadow-sm);
+  }
+  .progress-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+  .progress-track {
+    height: 8px;
+    border-radius: 99px;
+    background: var(--accent-soft);
+    overflow: hidden;
+  }
+  .progress-bar {
+    width: 0;
+    height: 100%;
+    border-radius: 99px;
+    background: linear-gradient(90deg, var(--accent), #3fb9b4);
+    transition: width .2s;
+  }
+  .progress-panel small { display: block; margin-top: 8px; color: var(--muted); }
+
+  /* ---------- แถบเปลี่ยนหน้า (ลอยติดบน) ---------- */
+  .page-toolbar {
+    position: sticky;
+    top: 12px;
+    z-index: 15;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    max-width: 794px;
+    margin: 0 auto 22px;
+    padding: 10px 14px;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    background: var(--panel-glass);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    box-shadow: var(--shadow-sm);
+  }
+  .page-toolbar.bottom { position: static; margin-top: 22px; }
+
+  .page-jump {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    font-weight: 600;
+  }
+  .page-jump input {
+    width: 4.4em;
+    padding: 7px 6px;
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    background: var(--panel);
+    color: var(--text);
+    text-align: center;
+    font-weight: 600;
+    appearance: textfield;
+    -moz-appearance: textfield;
+  }
+  .page-jump input::-webkit-outer-spin-button,
+  .page-jump input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+
+  .page-toolbar small {
+    width: 100%;
+    text-align: center;
+    color: var(--muted);
+    font-size: 12px;
+  }
+
+  /* ---------- หน้ากระดาษ ---------- */
+  .pages { position: relative; width: 100%; min-width: 0; }
+
+  .sheet {
+    width: min(794px, 100%);
+    margin: 0 auto 26px;
+    padding: clamp(22px, 5vw, 64px);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    background: var(--paper);
+    box-shadow: var(--shadow-lg);
+    scroll-margin-top: 86px;
+  }
+  .sheet:not([hidden]) { animation: pageIn .28s ease; }
+  @keyframes pageIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: none; }
+  }
+
+  /* หน้าที่ไม่ได้แสดงยังอยู่ใน DOM แบบไม่ใช้ display:none
+     เพื่อให้ตัวแปลของ Edge แปลหน้าเหล่านั้นล่วงหน้าได้ */
+  .sheet[hidden] {
+    display: block !important;
+    position: absolute;
+    left: -10000px;
+    top: 0;
+    width: min(794px, 100vw);
+    margin: 0;
+    visibility: hidden;
+    pointer-events: none;
+  }
+
+  .sheet-footer {
+    margin-top: 28px;
+    padding-top: 12px;
+    border-top: 1px dashed var(--guide);
+    color: var(--muted);
+    font-size: 12px;
+    text-align: center;
+    user-select: none;
+  }
+
+  /* ---------- เนื้อหาเอกสาร ---------- */
+  .flow {
+    display: flow-root;
+    min-height: calc(var(--reader-size) * var(--line-height) * var(--page-lines));
+    font-family: var(--font-doc);
+    font-size: var(--reader-size);
+    line-height: var(--line-height);
+    overflow-wrap: anywhere;
+  }
+  .flow > * { scroll-margin-top: 110px; }
+  .flow > :first-child { margin-top: 0; }
+  .flow h1, .flow h2, .flow h3, .flow h4 { margin: 1.4em 0 .55em; line-height: 1.4; font-weight: 700; }
+  .flow h1 { font-size: 1.55em; }
+  .flow h2 { font-size: 1.32em; }
+  .flow h3 { font-size: 1.14em; }
+  .flow p { margin: 0 0 1em; }
+  .flow ul, .flow ol { margin: 0 0 1em; padding-inline-start: 1.6em; }
+  .flow li { margin-bottom: .3em; }
+  .flow blockquote {
+    margin: 0 0 1em;
+    padding: .4em 1em;
+    border-left: 3px solid var(--guide);
+    color: var(--muted);
+  }
+  .flow img { max-width: 100%; max-height: 900px; height: auto; border-radius: 8px; }
+  .flow a { color: var(--accent); }
+  .flow table { display: block; max-width: 100%; overflow-x: auto; border-collapse: collapse; }
+  .flow td, .flow th { border: 1px solid var(--border); padding: 6px 9px; }
+
+  .flow .source-marker {
+    margin: 1.8em 0 1.2em;
+    padding-top: .7em;
+    border-top: 1px dashed var(--guide);
+    color: var(--muted);
+    font-family: var(--font-ui);
+    font-size: 12px;
+    letter-spacing: .06em;
+    text-align: center;
+  }
+  .flow .source-marker:first-child { margin-top: 0; padding-top: 0; border-top: 0; }
+
+  .flow .speaking {
+    background: var(--highlight);
+    border-radius: 4px;
+    padding-left: .35em;
+    box-shadow: inset 3px 0 0 var(--accent);
+  }
+
+  /* ---------- มุมมองอ่านต่อเนื่อง ---------- */
+  .reader-article {
+    width: min(794px, 100%);
+    margin: 0 auto;
+    padding: clamp(22px, 5vw, 64px);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    background: var(--paper);
+    box-shadow: var(--shadow-lg);
+  }
+  .reader-article > header h1 {
+    margin: 0 0 1em;
+    font-family: var(--font-doc);
+    font-size: calc(var(--reader-size) * 1.55);
+    line-height: 1.4;
+  }
+  .reading-flow { min-height: 0; }
+
+  body.reading-view .title-block,
+  body.reading-view #pages,
+  body.reading-view .page-toolbar,
+  body.reading-view .audio-panel { display: none !important; }
+
+  /* ---------- แผงเสียง (ลอยติดล่าง) ---------- */
+  .audio-panel {
+    position: sticky;
+    bottom: 14px;
+    z-index: 20;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    max-width: 880px;
+    margin: 22px auto 0;
+    padding: 12px 16px;
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    background: var(--panel-glass);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    box-shadow: var(--shadow-lg);
+  }
+  .audio-group { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; }
+  .audio-panel label { color: var(--muted); font-size: 13px; }
+
+  .voice-select {
+    max-width: 250px;
+    flex: 1 1 190px;
+    padding: 8px 10px;
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    background: var(--panel);
+    color: var(--text);
+  }
+  .speed { display: flex; align-items: center; gap: 6px; }
+  .speed input { width: 88px; accent-color: var(--accent); }
+  .speed output { min-width: 44px; font-size: 12.5px; }
+
+  #voiceHint, #speechPos { width: 100%; text-align: center; color: var(--muted); font-size: 12px; }
+  #voiceHint:empty, #speechPos:empty { display: none; }
+
+  /* ---------- โซนลากไฟล์ทั้งจอ ---------- */
+  .drop-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    display: none;
+    place-items: center;
+    padding: 24px;
+    background: rgb(15 18 33 / 55%);
+    backdrop-filter: blur(3px);
+    pointer-events: none;
+  }
+  .drop-overlay > div {
+    padding: 26px 42px;
+    border: 2px dashed var(--accent);
+    border-radius: 18px;
+    background: var(--panel);
+    color: var(--accent);
+    font-size: 18px;
+    font-weight: 700;
+    box-shadow: var(--shadow-lg);
+  }
+  body.dropping .drop-overlay { display: grid; }
+
+  /* ---------- ไดอะล็อก ---------- */
+  dialog {
+    max-width: min(500px, calc(100% - 28px));
+    padding: 24px 26px;
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    background: var(--panel);
+    color: var(--text);
+    line-height: 1.75;
+    box-shadow: var(--shadow-lg);
+  }
+  dialog::backdrop { background: rgb(10 14 28 / 60%); }
+  dialog h2 { margin: 0 0 12px; font-size: 18px; }
+  dialog ol { margin: 0 0 12px; padding-inline-start: 1.4em; }
+  dialog li { margin-bottom: 6px; }
+  dialog p { margin: 0 0 8px; color: var(--muted); font-size: 13.5px; }
+  dialog menu {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin: 16px 0 0;
+    padding: 0;
+  }
+
+  #passwordInput {
+    width: 100%;
+    margin: 10px 0 2px;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  .shortcut-list { display: grid; gap: 10px; margin: 0; }
+  .shortcut-list > div { display: flex; align-items: baseline; gap: 12px; }
+  .shortcut-list dt {
+    flex: none;
+    min-width: 118px;
+    padding: 2px 8px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--accent-soft);
+    font-family: ui-monospace, Consolas, monospace;
+    font-size: 13px;
+    text-align: center;
+  }
+  .shortcut-list dd { margin: 0; }
+
+  /* ---------- เต็มจอ ---------- */
+  body.is-fullscreen .sidebar { display: none; }
+  body.is-fullscreen .app { grid-template-columns: minmax(0, 1fr); }
+
+  /* ---------- Responsive ---------- */
+  @media (max-width: 850px) {
+    .app { display: block; }
     .sidebar {
-      padding: 28px 20px;
-      background: var(--panel);
-      border-right: 1px solid var(--border);
-    }
-
-    .sidebar-inner { position: sticky; top: 20px; }
-
-    .brand {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      margin-bottom: 28px;
-    }
-
-    .brand-icon {
-      display: grid;
-      place-items: center;
-      width: 42px;
-      height: 42px;
-      border-radius: 13px;
-      color: #fff;
-      background: #6357d9;
-      font-size: 23px;
-    }
-
-    .brand strong { display: block; font-size: 19px; }
-    .brand small { color: var(--muted); }
-
-    .dropzone {
-      display: block;
-      padding: 24px 15px;
-      border: 2px dashed #b8b3ee;
-      border-radius: 17px;
-      background: var(--soft);
-      text-align: center;
-      cursor: pointer;
-      line-height: 1.6;
-      transition: transform .2s, border-color .2s;
-    }
-
-    .dropzone:hover, .dropzone.dragover {
-      transform: translateY(-2px);
-      border-color: var(--accent);
-    }
-
-    .dropzone strong, .dropzone small { display: block; }
-    .dropzone small { color: var(--muted); }
-    .drop-icon { display: block; font-size: 32px; }
-
-    .file-badges {
-      display: flex;
-      justify-content: center;
-      gap: 6px;
-      margin-top: 8px;
-    }
-
-    .file-badges span {
-      padding: 2px 8px;
-      border-radius: 99px;
-      background: var(--panel);
-      color: var(--accent);
-      font-size: 11px;
-      font-weight: 700;
-    }
-
-    .file-input {
-      position: absolute;
-      width: 1px;
-      height: 1px;
-      opacity: 0;
-    }
-
-    .section-label {
-      margin: 26px 0 8px;
-      color: var(--muted);
-      font-size: 12px;
-      font-weight: 700;
-      letter-spacing: .08em;
-    }
-
-    .setting {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 10px;
-      padding: 11px 0;
+      padding: 18px 18px 24px;
+      border-right: 0;
       border-bottom: 1px solid var(--border);
     }
+    .sidebar-inner { position: static; max-height: none; overflow: visible; }
+    .settings-toggle { display: flex; }
+    .sidebar-settings { display: none; }
+    .sidebar.settings-open .sidebar-settings { display: block; }
+    .dropzone { padding: 16px 12px; }
+    .main { padding: 20px 14px 80px; }
+    .welcome { margin: 28px auto; padding: 26px 20px; }
+    .topbar { flex-wrap: wrap; align-items: flex-start; }
+  }
 
-    .setting label { color: var(--muted); }
+  @media (max-width: 560px) {
+    :root { --line-height: 1.6; }
+    .sheet, .reader-article { padding: 20px 16px; }
+    .page-toolbar { top: 8px; }
+    .audio-panel { bottom: 8px; padding: 10px; gap: 6px; }
+  }
 
-    .setting select, .voice-select {
-      min-width: 0;
-      padding: 9px;
-      border: 1px solid var(--border);
-      border-radius: 9px;
-      background: var(--panel);
-      color: var(--text);
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    *, *::before, *::after {
+      animation-duration: .01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: .01ms !important;
+      scroll-behavior: auto !important;
     }
-
-    .setting select { max-width: 150px; }
-
-    .setting input[type="checkbox"] {
-      width: 18px;
-      height: 18px;
-      accent-color: var(--accent);
-    }
-
-    .stepper { display: flex; align-items: center; gap: 7px; }
-    .stepper output { min-width: 40px; text-align: center; font-size: 13px; }
-
-    .secondary, .stepper button {
-      padding: 9px 12px;
-      border: 1px solid var(--border);
-      border-radius: 9px;
-      background: var(--panel);
-    }
-
-    .stepper button { min-width: 35px; padding: 7px; }
-
-    .secondary:hover:not(:disabled),
-    .stepper button:hover:not(:disabled) { background: var(--soft); }
-
-    .full { width: 100%; margin-top: 12px; }
-
-    .help {
-      margin-top: 20px;
-      padding: 14px;
-      border-radius: 12px;
-      background: var(--soft);
-      font-size: 13px;
-      line-height: 1.7;
-    }
-
-    .help p { margin: 0 0 10px; }
-
-    .note {
-      color: var(--muted);
-      font-size: 12px;
-      line-height: 1.7;
-    }
-
-    /* ---------- Main ---------- */
-    .main {
-      min-width: 0;
-      padding: 30px clamp(12px, 4vw, 55px) 65px;
-    }
-
-    .topbar {
-      display: flex;
-      align-items: flex-start;
-      justify-content: space-between;
-      gap: 16px;
-      margin-bottom: 16px;
-    }
-
-    .eyebrow {
-      color: var(--accent);
-      font-size: 12px;
-      font-weight: 800;
-      letter-spacing: .1em;
-    }
-
-    h1 {
-      margin: 6px 0 0;
-      font-size: clamp(23px, 3vw, 32px);
-      overflow-wrap: anywhere;
-    }
-
-    #status {
-      min-height: 24px;
-      margin: 0 0 14px;
-      color: var(--muted);
-      font-size: 14px;
-    }
-
-    .welcome {
-      max-width: 540px;
-      margin: 90px auto;
-      padding: 35px;
-      border: 1px solid var(--border);
-      border-radius: 20px;
-      background: var(--panel);
-      text-align: center;
-      line-height: 1.8;
-    }
-
-    .welcome-icon { font-size: 48px; }
-    .welcome h2 { margin-bottom: 5px; }
-    .welcome p { color: var(--muted); }
-
-    /* ---------- Progress ---------- */
-    .progress-panel {
-      max-width: 794px;
-      margin: 0 auto 18px;
-      padding: 16px;
-      border: 1px solid var(--border);
-      border-radius: 14px;
-      background: var(--panel);
-      box-shadow: 0 10px 30px rgb(20 25 50 / 8%);
-    }
-
-    .progress-head {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 10px;
-      margin-bottom: 10px;
-    }
-
-    .progress-track {
-      height: 8px;
-      border-radius: 99px;
-      background: var(--soft);
-      overflow: hidden;
-    }
-
-    .progress-bar {
-      width: 0;
-      height: 100%;
-      border-radius: 99px;
-      background: linear-gradient(90deg, #6659e8, #4cbfbd);
-      transition: width .2s;
-    }
-
-    .progress-panel small {
-      display: block;
-      margin-top: 8px;
-      color: var(--muted);
-    }
-
-    /* ---------- Pages ---------- */
-    .page-toolbar, .audio-panel {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      gap: 10px;
-      padding: 12px;
-      border: 1px solid var(--border);
-      border-radius: 14px;
-      background: var(--panel);
-    }
-
-    /* display:flex ด้านบนจะทับ attribute hidden จึงต้องกำหนดซ้ำ */
-    .page-toolbar[hidden], .audio-panel[hidden] { display: none; }
-
-    .page-toolbar {
-      justify-content: center;
-      margin: 0 auto 18px;
-      max-width: 794px;
-    }
-
-    .page-toolbar.bottom { margin-top: 18px; }
-
-    .page-jump {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 6px;
-      min-width: 120px;
-      font-weight: 600;
-    }
-
-    .page-jump input {
-      width: 5.2em;
-      padding: 7px 8px;
-      border: 1px solid var(--border);
-      border-radius: 9px;
-      background: var(--panel);
-      color: var(--text);
-      text-align: center;
-      font-weight: 600;
-      -moz-appearance: textfield;
-    }
-
-    .page-toolbar small {
-      width: 100%;
-      text-align: center;
-      color: var(--muted);
-    }
-
-    .pages { width: 100%; min-width: 0; }
-
-    .sheet {
-      width: min(794px, 100%);
-      margin: 0 auto;
-      padding: clamp(20px, 5vw, 65px);
-      border: 1px solid var(--border);
-      background-color: var(--paper);
-      box-shadow: 0 18px 55px rgb(25 32 63 / 10%);
-      overflow: hidden;
-    }
-
-    /* หน้าที่ไม่ได้แสดงยังอยู่ใน DOM และไม่ใช้ display:none
-       เพื่อให้ตัวแปลของ Edge แปลหน้าเหล่านั้นล่วงหน้าได้ */
-    .sheet[hidden] {
-      display: block;
-      position: absolute;
-      left: -10000px;
-      top: 0;
-      width: min(794px, 100vw);
-      visibility: hidden;
-      pointer-events: none;
-    }
-
-    .flow {
-      width: 100%;
-      height: calc(var(--reader-size) * var(--line-height) * var(--page-lines));
-      overflow-y: auto;
-      overflow-x: hidden;
-      font-size: var(--reader-size);
-      line-height: var(--line-height);
-      overflow-wrap: anywhere;
-      scrollbar-width: thin;
-    }
-
-    .flow > :first-child { margin-top: 0; }
-    .flow h1, .flow h2, .flow h3 { line-height: 1.35; }
-    .flow p { margin: 0 0 1em; }
-    .flow img { max-width: 100%; max-height: 900px; height: auto; }
-    .flow a { color: var(--accent); }
-
-    .flow table {
-      display: block;
-      max-width: 100%;
-      overflow-x: auto;
-      border-collapse: collapse;
-    }
-
-    .flow td, .flow th {
-      border: 1px solid var(--border);
-      padding: 6px;
-    }
-
-    .flow .source-marker {
-      margin: 1.6em 0 1.1em;
-      padding-top: .6em;
-      border-top: 1px dashed var(--guide);
-      color: var(--muted);
-      font-size: 12px;
-      letter-spacing: .05em;
-      text-align: center;
-    }
-
-    .flow .source-marker:first-child {
-      margin-top: 0;
-      padding-top: 0;
-      border-top: 0;
-    }
-
-    .flow .speaking {
-      background: var(--highlight);
-      box-shadow: 0 0 0 6px var(--highlight);
-      border-radius: 4px;
-    }
-
-    .topbar .title-block { min-width: 0; }
-
-    .topbar-actions {
-      display: flex;
-      flex-wrap: wrap;
-      justify-content: flex-end;
-      gap: 8px;
-      margin-left: auto;
-    }
-
-    .reader-article {
-      width: min(794px, 100%);
-      margin: 0 auto;
-      padding: clamp(20px, 5vw, 65px);
-      border: 1px solid var(--border);
-      background: var(--paper);
-      box-shadow: 0 18px 55px rgb(25 32 63 / 10%);
-    }
-
-    .reader-article[hidden] { display: none; }
-
-    .reader-article h1 {
-      margin: 0 0 1em;
-      font-size: calc(var(--reader-size) * 1.7);
-      line-height: 1.35;
-    }
-
-    .reading-flow {
-      height: auto;
-      overflow: visible;
-    }
-
-    .flow hr.source-break {
-      margin: 2em 0;
-      border: 0;
-      border-top: 1px dashed var(--guide);
-    }
-
-    body.reading-view .title-block,
-    body.reading-view #pages,
-    body.reading-view .page-toolbar,
-    body.reading-view .audio-panel { display: none; }
-
-    /* ---------- Audio ---------- */
-    .audio-panel {
-      position: sticky;
-      bottom: 12px;
-      justify-content: center;
-      margin-top: 18px;
-      box-shadow: 0 12px 35px rgb(20 25 50 / 12%);
-      z-index: 10;
-    }
-
-    .primary {
-      padding: 10px 16px;
-      border: 0;
-      border-radius: 10px;
-      background: #6357d9;
-      color: #fff;
-      font-weight: 700;
-    }
-
-    .primary:hover:not(:disabled) { background: #5145c7; }
-
-    .voice-select { max-width: 280px; flex: 1 1 200px; }
-    .audio-panel label { color: var(--muted); font-size: 13px; }
-
-    .speed { display: flex; align-items: center; gap: 6px; }
-    .speed input { width: 90px; accent-color: var(--accent); }
-
-    #voiceHint {
-      width: 100%;
-      text-align: center;
-      color: var(--muted);
-      font-size: 12px;
-    }
-
-    #voiceHint:empty { display: none; }
-
-    dialog {
-      max-width: min(470px, calc(100% - 28px));
-      padding: 24px;
-      border: 1px solid var(--border);
-      border-radius: 16px;
-      background: var(--panel);
-      color: var(--text);
-      line-height: 1.7;
-    }
-
-    dialog::backdrop { background: rgb(10 15 30 / 55%); }
-
-    @media (max-width: 850px) {
-      .app { display: block; }
-      .sidebar { border-right: 0; border-bottom: 1px solid var(--border); }
-      .sidebar-inner { position: static; }
-    }
-
-    @media (max-width: 560px) {
-      :root { --line-height: 1.55; }
-      .topbar { flex-wrap: wrap; }
-      .sheet { padding: 20px; }
-      .audio-panel { bottom: 7px; }
-    }
-
-    @media (prefers-reduced-motion: reduce) {
-      *, *::before, *::after {
-        scroll-behavior: auto !important;
-        transition-duration: .01ms !important;
-      }
-    }
-  </style>
+  }
+</style>
 </head>
 
-<body class="dark">
+<body>
+  <div id="dropOverlay" class="drop-overlay" aria-hidden="true">
+    <div>⇩ ปล่อยไฟล์เพื่อเปิด</div>
+  </div>
+
   <div class="app">
-    <aside class="sidebar" lang="th">
+    <!-- ================= Sidebar ================= -->
+    <aside class="sidebar" id="sidebar" lang="th">
       <div class="sidebar-inner">
         <div class="brand">
           <span class="brand-icon" aria-hidden="true">▤</span>
           <div>
             <strong>อ่านสบาย</strong>
-            <small>DOCX & PDF Reader สำหรับ Edge</small>
+            <small>อ่าน DOCX &amp; PDF พร้อมเสียงอ่าน</small>
           </div>
         </div>
 
         <label id="dropzone" class="dropzone" for="fileInput" tabindex="0">
-          <span class="drop-icon" aria-hidden="true">⇧</span>
+          <span class="drop-icon" aria-hidden="true">⇪</span>
           <strong>เลือกไฟล์ หรือลากมาวาง</strong>
           <small>รองรับ PDF สแกนด้วย OCR</small>
           <span class="file-badges" aria-hidden="true">
@@ -561,140 +732,186 @@
         <input id="fileInput" class="file-input" type="file"
           accept=".docx,.pdf,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document">
 
-        <p class="section-label">PDF & OCR</p>
-
-        <div class="setting">
-          <label for="pdfMode">โหมด PDF</label>
-          <select id="pdfMode">
-            <option value="auto" selected>อัตโนมัติ</option>
-            <option value="ocr">OCR ทุกหน้า</option>
-            <option value="text">ข้อความเท่านั้น</option>
-          </select>
+        <div id="fileCard" class="file-card" hidden>
+          <strong id="fileCardName"></strong>
+          <small id="fileCardMeta"></small>
         </div>
 
-        <div class="setting">
-          <label for="ocrLang">ภาษา OCR</label>
-          <select id="ocrLang">
-            <option value="tha+eng" selected>ไทย + อังกฤษ</option>
-            <option value="tha">ไทย</option>
-            <option value="eng">อังกฤษ</option>
-            <option value="chi_sim+eng">จีนตัวย่อ + อังกฤษ</option>
-            <option value="jpn+eng">ญี่ปุ่น + อังกฤษ</option>
-            <option value="kor+eng">เกาหลี + อังกฤษ</option>
-          </select>
-        </div>
-
-        <button id="reprocessBtn" class="secondary full" type="button" disabled>
-          ประมวลผล PDF ใหม่
+        <button id="settingsToggle" class="secondary settings-toggle" type="button" aria-expanded="false">
+          ⚙ ตั้งค่าการอ่าน
         </button>
 
-        <p class="section-label">การแสดงผล</p>
+        <div class="sidebar-settings">
+          <p class="section-label">การแบ่งหน้า &amp; การอ่าน</p>
 
-        <div class="setting">
-          <label for="fontValue">ขนาดตัวอักษร</label>
-          <div class="stepper">
-            <button id="smallerBtn" type="button" aria-label="ลดขนาดตัวอักษร">−</button>
-            <output id="fontValue">17px</output>
-            <button id="largerBtn" type="button" aria-label="เพิ่มขนาดตัวอักษร">+</button>
+          <div class="setting">
+            <label for="fontValue">ขนาดตัวอักษร</label>
+            <div class="stepper">
+              <button id="smallerBtn" type="button" aria-label="ลดขนาดตัวอักษร">−</button>
+              <output id="fontValue">17px</output>
+              <button id="largerBtn" type="button" aria-label="เพิ่มขนาดตัวอักษร">+</button>
+            </div>
           </div>
-        </div>
 
-        <div class="setting">
-          <label for="themeSelect">ธีม</label>
-          <select id="themeSelect">
-            <option value="light">สว่าง</option>
-            <option value="dark" selected>มืด</option>
-          </select>
-        </div>
+          <div class="setting">
+            <label for="pageLength">ความยาวหน้า</label>
+            <select id="pageLength">
+              <option value="35">สั้น (35 บรรทัด)</option>
+              <option value="50" selected>ปกติ (50 บรรทัด)</option>
+              <option value="70">ยาว (70 บรรทัด)</option>
+            </select>
+          </div>
 
-        <div class="setting">
-          <label for="readFromPage">Reading mode เริ่มจากหน้าที่เลือก</label>
-          <input id="readFromPage" type="checkbox" checked>
-        </div>
+          <div class="setting">
+            <label for="themeSelect">ธีมสี</label>
+            <select id="themeSelect">
+              <option value="auto" selected>ตามระบบ</option>
+              <option value="light">สว่าง</option>
+              <option value="dark">มืด</option>
+            </select>
+          </div>
 
-        <div class="setting">
-          <label for="sourceLanguage">ภาษาต้นฉบับ</label>
-          <select id="sourceLanguage">
-            <option value="en">อังกฤษ</option>
-            <option value="zh-CN">จีน</option>
-            <option value="ja">ญี่ปุ่น</option>
-            <option value="ko">เกาหลี</option>
-            <option value="fr">ฝรั่งเศส</option>
-            <option value="de">เยอรมัน</option>
-            <option value="th">ไทย</option>
-          </select>
-        </div>
+          <p class="section-label">PDF &amp; OCR</p>
 
-        <div class="help">
-          <p><strong>แปลเป็นไทยด้วย Edge</strong><br>
-            ตรวจภาษาต้นฉบับ แล้วใช้คำสั่งแปลภาษาของ Edge
-          </p>
-          <button id="translateHelpBtn" class="secondary" type="button">
-            ดูวิธีแปล
+          <div class="setting">
+            <label for="pdfMode">โหมด PDF</label>
+            <select id="pdfMode">
+              <option value="auto" selected>อัตโนมัติ</option>
+              <option value="ocr">OCR ทุกหน้า</option>
+              <option value="text">ข้อความเท่านั้น</option>
+            </select>
+          </div>
+
+          <div class="setting">
+            <label for="ocrLang">ภาษา OCR</label>
+            <select id="ocrLang">
+              <option value="tha+eng" selected>ไทย + อังกฤษ</option>
+              <option value="tha">ไทย</option>
+              <option value="eng">อังกฤษ</option>
+              <option value="chi_sim+eng">จีนตัวย่อ + อังกฤษ</option>
+              <option value="jpn+eng">ญี่ปุ่น + อังกฤษ</option>
+              <option value="kor+eng">เกาหลี + อังกฤษ</option>
+            </select>
+          </div>
+
+          <button id="reprocessBtn" class="secondary full" type="button" disabled>
+            ประมวลผล PDF ใหม่
           </button>
-        </div>
 
-        <div class="help">
-          <p><strong>Reading mode ของ Edge</strong><br>
-            สลับเป็นมุมมองอ่านต่อเนื่อง แล้วเปิด Reading mode ด้วย F9
+          <p class="section-label">ภาษา &amp; การแปล</p>
+
+          <div class="setting">
+            <label for="sourceLanguage">ภาษาต้นฉบับ</label>
+            <select id="sourceLanguage">
+              <option value="en">อังกฤษ</option>
+              <option value="zh-CN">จีน</option>
+              <option value="ja">ญี่ปุ่น</option>
+              <option value="ko">เกาหลี</option>
+              <option value="fr">ฝรั่งเศส</option>
+              <option value="de">เยอรมัน</option>
+              <option value="th">ไทย</option>
+            </select>
+          </div>
+
+          <div class="help">
+            <p><strong>แปลเป็นไทยด้วย Edge</strong><br>
+              ตรวจว่า «ภาษาต้นฉบับ» ถูกต้อง แล้วใช้คำสั่งแปลภาษาของ Edge</p>
+            <button id="translateHelpBtn" class="secondary" type="button">ดูวิธีแปล</button>
+          </div>
+
+          <p class="section-label">Reading mode (Edge)</p>
+
+          <div class="setting">
+            <label for="readFromPage">เริ่มที่หน้าปัจจุบัน</label>
+            <input id="readFromPage" type="checkbox" checked>
+          </div>
+
+          <div class="help">
+            <p><strong>มุมมองอ่านต่อเนื่อง</strong><br>
+              สลับเป็นหน้าเดียวยาว แล้วกด F9 เพื่อเปิด Reading mode ของ Edge</p>
+            <button id="readingHelpBtn" class="secondary" type="button">ดูวิธีใช้</button>
+          </div>
+
+          <p class="note">
+            ไฟล์และ OCR ประมวลผลภายในเบราว์เซอร์ทั้งหมด ไม่มีการอัปโหลดไปยังเซิร์ฟเวอร์
+            ส่วนเสียงอ่านและการแปลเป็นบริการออนไลน์ของเบราว์เซอร์
           </p>
-          <button id="readingHelpBtn" class="secondary" type="button">
-            ดูวิธีใช้
-          </button>
         </div>
-
-        <p class="note">
-          ไฟล์และ OCR ประมวลผลภายในเบราว์เซอร์ ไม่อัปโหลดไปยังเซิร์ฟเวอร์ของแอป
-          ส่วนการแปลและเสียง Natural เป็นบริการออนไลน์ของ Edge
-        </p>
       </div>
     </aside>
 
-    <main class="main">
-      <header class="topbar" lang="th">
+    <!-- ================= Main ================= -->
+    <main class="main" lang="th">
+      <header class="topbar">
         <div class="title-block">
-          <span class="eyebrow">YOUR READING SPACE</span>
+          <span class="eyebrow">พื้นที่อ่านของคุณ</span>
           <h1 id="documentTitle">พร้อมสำหรับการอ่าน</h1>
         </div>
         <div class="topbar-actions">
-          <button id="readingViewBtn" class="secondary" type="button" disabled>
-            Reading mode (Edge)
+          <button id="readingViewBtn" class="secondary" type="button" disabled
+            title="สลับเป็นมุมมองหน้าเดียวยาว (F9)">
+            📖 Reading mode (Edge)
           </button>
           <button id="fullscreenBtn" class="secondary" type="button" disabled>
-            เต็มจอ
+            ⛶ เต็มจอ
+          </button>
+          <button id="shortcutsBtn" class="secondary" type="button" title="ดูคีย์ลัด (?)">
+            ⌨ คีย์ลัด
+          </button>
+          <button id="closeDocBtn" class="secondary" type="button" disabled>
+            ✕ ปิดเอกสาร
           </button>
         </div>
       </header>
 
-      <p id="status" role="status" aria-live="polite" lang="th">
-        เลือกไฟล์ DOCX หรือ PDF เพื่อเริ่มต้น
+      <p id="status" role="status" aria-live="polite">
+        เลือกไฟล์ DOCX หรือ PDF เพื่อเริ่มต้น หรือลากไฟล์มาวางที่หน้าจอได้เลย
       </p>
 
-      <section id="progressPanel" class="progress-panel" hidden lang="th"
-        aria-label="ความคืบหน้าการประมวลผล">
+      <section id="progressPanel" class="progress-panel" hidden aria-label="ความคืบหน้าการประมวลผล">
         <div class="progress-head">
           <strong id="progressTitle">กำลังประมวลผล…</strong>
           <button id="cancelBtn" class="secondary" type="button">ยกเลิก</button>
         </div>
-        <div class="progress-track" role="progressbar" aria-valuemin="0"
-          aria-valuemax="100" aria-valuenow="0" id="progressTrack">
+        <div class="progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100"
+          aria-valuenow="0" id="progressTrack">
           <div id="progressBar" class="progress-bar"></div>
         </div>
         <small id="progressDetail"></small>
       </section>
 
-      <div id="welcome" class="welcome" lang="th">
-        <div class="welcome-icon" aria-hidden="true">▤</div>
-        <h2>อ่านเอกสารทีละหน้า</h2>
-        <p>
-          เปิดไฟล์ Word, PDF หรือ PDF สแกน แล้วอ่านในหน้าละประมาณ 50 บรรทัด
-          พร้อมฟังเสียงอ่านด้วย Premwadee
-        </p>
+      <div id="welcome" class="welcome">
+        <div class="welcome-icon" aria-hidden="true">📄</div>
+        <h2>อ่านเอกสารทีละหน้า สบายตา</h2>
+        <p>เปิดไฟล์ Word หรือ PDF แล้วอ่านเป็นหน้า ๆ
+          พร้อมเสียงอ่านภาษาไทยและการไฮไลต์ข้อความ</p>
+        <ul class="feature-list">
+          <li>
+            <span aria-hidden="true">📖</span>
+            <div><strong>แบ่งหน้าอัตโนมัติ</strong>
+              <small>หน้าละประมาณ 50 บรรทัด ปรับความยาวหน้าได้</small></div>
+          </li>
+          <li>
+            <span aria-hidden="true">🔊</span>
+            <div><strong>เสียงอ่านไทย</strong>
+              <small>ฟังด้วยเสียง Premwadee ของ Edge พร้อมไฮไลต์</small></div>
+          </li>
+          <li>
+            <span aria-hidden="true">🔎</span>
+            <div><strong>รองรับ PDF สแกน</strong>
+              <small>ใช้ OCR ประมวลผลในเครื่อง ไม่ส่งไฟล์ออกไป</small></div>
+          </li>
+        </ul>
+        <button id="welcomePickBtn" class="primary" type="button">เลือกไฟล์เพื่อเริ่มอ่าน</button>
       </div>
 
-      <nav class="page-toolbar" data-nav aria-label="เปลี่ยนหน้า" hidden lang="th">
+      <nav class="page-toolbar" data-nav aria-label="เปลี่ยนหน้า" hidden>
         <button class="secondary" type="button" data-go="-1">← ก่อนหน้า</button>
-        <label class="page-jump">หน้า <input type="number" inputmode="numeric" min="1" value="1" data-page-input aria-label="ไปยังหน้าที่"> / <span data-total>1</span></label>
+        <label class="page-jump">หน้า
+          <input type="number" inputmode="numeric" min="1" value="1" data-page-input
+            aria-label="ไปยังหน้าที่">
+          / <span data-total>1</span>
+        </label>
         <button class="secondary" type="button" data-go="1">ถัดไป →</button>
       </nav>
 
@@ -705,33 +922,30 @@
 
       <div id="pages" class="pages" aria-label="หน้าเอกสาร"></div>
 
-      <nav class="page-toolbar bottom" data-nav aria-label="เปลี่ยนหน้า" hidden lang="th">
+      <nav class="page-toolbar bottom" data-nav aria-label="เปลี่ยนหน้า" hidden>
         <button class="secondary" type="button" data-go="-1">← ก่อนหน้า</button>
-        <label class="page-jump">หน้า <input type="number" inputmode="numeric" min="1" value="1" data-page-input aria-label="ไปยังหน้าที่"> / <span data-total>1</span></label>
+        <label class="page-jump">หน้า
+          <input type="number" inputmode="numeric" min="1" value="1" data-page-input
+            aria-label="ไปยังหน้าที่">
+          / <span data-total>1</span>
+        </label>
         <button class="secondary" type="button" data-go="1">ถัดไป →</button>
-        <small>ใช้ปุ่มลูกศร ← → บนแป้นพิมพ์เพื่อเปลี่ยนหน้าได้</small>
+        <small data-hint></small>
       </nav>
 
-      <!-- ====== Audio Panel ====== -->
-      <section id="audioPanel" class="audio-panel"
-        aria-label="เครื่องมืออ่านออกเสียง" lang="th" hidden>
-        <button id="playBtn" class="primary" type="button" disabled>
-          ▶ อ่านจากหน้านี้
-        </button>
-        <button id="prevBtn" class="secondary" type="button" disabled
-          title="ย้อนบรรทัด (Alt + ←)">
-          ← ย้อนบรรทัด
-        </button>
-        <button id="nextBtn" class="secondary" type="button" disabled
-          title="ข้ามบรรทัด (Alt + →)">
-          ข้ามบรรทัด →
-        </button>
-        <button id="pauseBtn" class="secondary" type="button" disabled>
-          พักเสียง
-        </button>
-        <button id="stopBtn" class="secondary" type="button" disabled>
-          หยุด
-        </button>
+      <!-- ====== แผงเสียง ====== -->
+      <section id="audioPanel" class="audio-panel" aria-label="เครื่องมืออ่านออกเสียง" hidden>
+        <button id="playBtn" class="primary" type="button" disabled>▶ อ่านจากหน้านี้</button>
+
+        <div class="audio-group">
+          <button id="prevBtn" class="secondary" type="button" disabled
+            title="ย้อนบรรทัด (Alt + ←)">⏮ ย้อน</button>
+          <button id="pauseBtn" class="secondary" type="button" disabled
+            title="พัก/เล่นต่อ (Space)">⏸ พัก</button>
+          <button id="nextBtn" class="secondary" type="button" disabled
+            title="ข้ามบรรทัด (Alt + →)">⏭ ข้าม</button>
+          <button id="stopBtn" class="secondary" type="button" disabled>⏹ หยุด</button>
+        </div>
 
         <label for="voiceSelect">เสียง</label>
         <select id="voiceSelect" class="voice-select">
@@ -740,33 +954,44 @@
 
         <div class="speed">
           <label for="rateInput">ความเร็ว</label>
-          <input id="rateInput" type="range" min="0.7" max="1.3"
-            step="0.05" value="0.90">
+          <input id="rateInput" type="range" min="0.7" max="1.3" step="0.05" value="0.9">
           <output id="rateValue">0.90×</output>
         </div>
 
+        <span id="speechPos" aria-hidden="true"></span>
         <span id="voiceHint" aria-live="polite"></span>
       </section>
     </main>
   </div>
 
+  <!-- ================= ไดอะล็อก ================= -->
+  <dialog id="passwordDialog" lang="th">
+    <h2>เอกสารถูกล็อกด้วยรหัสผ่าน</h2>
+    <p id="passwordMsg">กรุณาใส่รหัสผ่านเพื่อเปิดไฟล์</p>
+    <form method="dialog">
+      <input id="passwordInput" type="password" autocomplete="off" required
+        aria-label="รหัสผ่านของไฟล์ PDF">
+      <menu>
+        <button class="primary" type="submit" value="ok">ปลดล็อก</button>
+        <button class="secondary" type="submit" value="cancel" formnovalidate>ยกเลิก</button>
+      </menu>
+    </form>
+  </dialog>
+
   <dialog id="readingDialog" lang="th">
     <h2>เปิด Reading mode ใน Edge</h2>
     <ol>
-      <li>เปิดไฟล์ แล้วกดปุ่ม «Reading mode (Edge)» เพื่อสลับเป็นมุมมองอ่านต่อเนื่อง</li>
+      <li>เปิดไฟล์ แล้วกดปุ่ม «📖 Reading mode (Edge)» เพื่อสลับเป็นมุมมองอ่านต่อเนื่อง</li>
       <li>กด F9 หรือคลิกไอคอนรูปหนังสือที่แถบที่อยู่ของ Edge</li>
       <li>ใน Reading mode ใช้ «อ่านออกเสียง» และ «ตัวเลือกข้อความ» ของ Edge ได้</li>
-      <li>กด «กลับมุมมองแบ่งหน้า» เมื่อต้องการใช้การแบ่งหน้าและเสียงอ่านของแอปอีกครั้ง</li>
+      <li>กด «↩ กลับมุมมองแบ่งหน้า» เมื่อต้องการใช้การแบ่งหน้าและเสียงอ่านของแอปอีกครั้ง</li>
     </ol>
     <p>
-      เว็บไซต์ไม่สามารถสั่งเปิด Reading mode ให้อัตโนมัติได้
-      เมื่อกด F9 แอปจะพยายามสลับเป็นมุมมองต่อเนื่องให้เอง
-      ถ้ายังไม่เปิด ให้กดปุ่มสลับก่อนแล้วกด F9 อีกครั้ง
+      เว็บไซต์ไม่สามารถสั่งเปิด Reading mode ให้อัตโนมัติได้ เมื่อกด F9 แอปจะพยายามสลับเป็น
+      มุมมองต่อเนื่องให้เอง ถ้ายังไม่เปิด ให้กดปุ่มสลับก่อนแล้วกด F9 อีกครั้ง
       เอกสารที่สั้นมากหรือหน้าที่เปิดผ่าน file:// อาจไม่แสดงไอคอน Reading mode
     </p>
-    <form method="dialog">
-      <button class="secondary" type="submit">เข้าใจแล้ว</button>
-    </form>
+    <menu><button class="secondary" type="button" data-close>เข้าใจแล้ว</button></menu>
   </dialog>
 
   <dialog id="translateDialog" lang="th">
@@ -775,19 +1000,33 @@
       <li>เปิดไฟล์ แล้วตรวจว่า «ภาษาต้นฉบับ» ตรงกับเอกสาร</li>
       <li>กดไอคอนแปลภาษาที่แถบที่อยู่ของ Edge หรือคลิกขวาแล้วเลือกคำสั่งแปล</li>
       <li>เลือกภาษาปลายทางเป็น «ไทย»</li>
-      <li>กด «อ่านจากหน้านี้» เพื่อฟังฉบับแปลด้วยเสียง Premwadee</li>
+      <li>กด «▶ อ่านจากหน้านี้» เพื่อฟังฉบับแปลด้วยเสียงภาษาไทย</li>
     </ol>
     <p>
       เว็บไซต์ไม่สามารถสั่งให้ Edge แปลอัตโนมัติได้
       และคำสั่งแปลอาจไม่ปรากฏเมื่อเปิดหน้าเว็บผ่าน file://
     </p>
-    <form method="dialog">
-      <button class="secondary" type="submit">เข้าใจแล้ว</button>
-    </form>
+    <menu><button class="secondary" type="button" data-close>เข้าใจแล้ว</button></menu>
+  </dialog>
+
+  <dialog id="shortcutsDialog" lang="th">
+    <h2>คีย์ลัด</h2>
+    <dl class="shortcut-list">
+      <div><dt>← / →</dt><dd>เปลี่ยนหน้า</dd></div>
+      <div><dt>Alt + ← / →</dt><dd>ย้อน / ข้ามบรรทัดที่กำลังอ่าน</dd></div>
+      <div><dt>Space</dt><dd>พัก / เล่นเสียงต่อ (ขณะอ่านออกเสียง)</dd></div>
+      <div><dt>F9</dt><dd>สลับมุมมองอ่านต่อเนื่อง / Reading mode ของ Edge</dd></div>
+      <div><dt>?</dt><dd>แสดงหน้าต่างนี้</dd></div>
+    </dl>
+    <menu><button class="secondary" type="button" data-close>ปิด</button></menu>
   </dialog>
 
   <script>
+    "use strict";
+
     const $ = id => document.getElementById(id);
+    const pagesHost = $("pages");
+    const voiceSelect = $("voiceSelect");
 
     /* ================= ไลบรารีที่โหลดเมื่อจำเป็น ================= */
 
@@ -799,6 +1038,14 @@
 
     const OCR_SCALE = 2.5;
     const OCR_MAX_SIDE = 3500;
+    const PAGE_DELAY_MS = 5000;       // พักระหว่างหน้าก่อนอ่านหน้าถัดไป
+    const TRANSLATE_WAIT_MS = 8000;   // รอ Edge แปลหน้าใหม่ก่อนเริ่มอ่าน
+    const DEFAULT_VOICE_PATTERN = /premwadee/i;
+    const STORAGE_KEY = "aun-sabai-v1";
+
+    const speechSupported =
+      "speechSynthesis" in window &&
+      "SpeechSynthesisUtterance" in window;
 
     const scriptCache = {};
 
@@ -813,31 +1060,27 @@
         };
         document.head.append(script);
       });
-
       return scriptCache[src];
     }
 
     /* ================= สถานะของแอป ================= */
 
-    const pagesHost = $("pages");
-    const voiceSelect = $("voiceSelect");
-    const speechSupported =
-      "speechSynthesis" in window &&
-      "SpeechSynthesisUtterance" in window;
-
-    const DEFAULT_VOICE_PATTERN = /premwadee/i;
-
-    // ดีเลย์ก่อนเลื่อนไปหน้าถัดไปตอนอ่านจบหน้า (มิลลิวินาที)
-    const PAGE_DELAY_MS = 5000;
-    // เวลารอสูงสุดให้ Edge แปลหน้าใหม่ก่อนเริ่มอ่าน
-    const TRANSLATE_WAIT_MS = 8000;
-
     let sourceHtml = "";
+    let currentFileName = "";
+    let lastFile = null;
+
     let fontSize = 17;
     let currentPage = 0;
     let pageElements = [];
+    let docBlocks = [];
+    let docBlocksDirty = true;
+    let pageFirstBlock = [];
+    let paginationDirty = false;
+    let readingView = false;
+
     let voices = [];
     let userPickedVoice = false;
+    let pickedVoiceKey = "";
     let speechItems = [];
     let speechIndex = 0;
     let speechSession = 0;
@@ -848,30 +1091,35 @@
     let speechPage = 0;
     let pendingPage = -1;
     let utteranceId = 0;
+    let currentUtterance = null;
+
     let fileRequest = 0;
     let renderTimer = 0;
+    let paginateToken = 0;
     let lastLayoutWidth = 0;
     let highlighted = null;
-    let readingView = false;
-    let paginationDirty = false;
+    let translationWatchActive = true;
 
-    let lastFile = null;
     let activePdfTask = null;
     let activeOcrWorker = null;
     let ocrProgressHandler = null;
+    let dragDepth = 0;
 
-    function setStatus(text) {
-      $("status").textContent = text;
+    /* ================= ข้อความสถานะ & ความคืบหน้า ================= */
+
+    function setStatus(text, tone = "") {
+      const status = $("status");
+      status.textContent = text;
+      status.classList.toggle("error", tone === "error");
     }
-
-    /* ================= แถบความคืบหน้า ================= */
 
     function setProgress(fraction, title, detail = "") {
       const percent = Math.round(Math.max(0, Math.min(1, fraction)) * 100);
       $("progressPanel").hidden = false;
       $("progressTitle").textContent = title;
-      $("progressDetail").textContent = detail;
-      $("progressBar").style.width = `${percent}%`;
+      $("progressDetail").textContent =
+        (detail ? detail + " · " : "") + percent + "%";
+      $("progressBar").style.width = percent + "%";
       $("progressTrack").setAttribute("aria-valuenow", String(percent));
     }
 
@@ -896,21 +1144,16 @@
         Promise.resolve(activeOcrWorker.terminate()).catch(() => {});
         activeOcrWorker = null;
       }
-
       if (activePdfTask) {
         Promise.resolve(activePdfTask.destroy()).catch(() => {});
         activePdfTask = null;
       }
-
       hideProgress();
     }
 
-    $("cancelBtn").addEventListener("click", () => {
-      cancelProcessing();
-      setStatus("ยกเลิกการประมวลผลแล้ว");
-    });
+    /* ================= เครื่องมือทั่วไป ================= */
 
-    /* ================= เครื่องมือข้อความ ================= */
+    const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
     function escapeHtml(text) {
       return text
@@ -945,6 +1188,80 @@
     function blockToHtml(block) {
       const text = escapeHtml(block.text);
       return block.type === "h" ? `<h2>${text}</h2>` : `<p>${text}</p>`;
+    }
+
+    function formatBytes(bytes) {
+      if (!Number.isFinite(bytes) || bytes <= 0) return "";
+      if (bytes < 1024) return `${bytes} B`;
+      if (bytes < 1048576) return `${(bytes / 1024).toFixed(1)} KB`;
+      return `${(bytes / 1048576).toFixed(1)} MB`;
+    }
+
+    /* ================= การตั้งค่า (localStorage) ================= */
+
+    const themeMedia = window.matchMedia
+      ? window.matchMedia("(prefers-color-scheme: dark)")
+      : null;
+
+    function applyTheme(value) {
+      const dark = value === "dark" ||
+        (value !== "light" && themeMedia && themeMedia.matches);
+      document.documentElement.classList.toggle("dark", dark);
+    }
+
+    function loadSettings() {
+      try {
+        return JSON.parse(localStorage.getItem(STORAGE_KEY)) || {};
+      } catch {
+        return {};
+      }
+    }
+
+    function saveSettings() {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify({
+          theme: $("themeSelect").value,
+          fontSize,
+          pageLength: $("pageLength").value,
+          pdfMode: $("pdfMode").value,
+          ocrLang: $("ocrLang").value,
+          sourceLanguage: $("sourceLanguage").value,
+          readFromPage: $("readFromPage").checked,
+          rate: $("rateInput").value
+        }));
+      } catch { /* localStorage อาจถูกปิดใช้งาน */ }
+    }
+
+    function applyFontSize() {
+      document.documentElement.style.setProperty("--reader-size", fontSize + "px");
+      $("fontValue").textContent = fontSize + "px";
+    }
+
+    function applyPageLength() {
+      document.documentElement.style.setProperty("--page-lines", $("pageLength").value);
+    }
+
+    function changeFontSize(delta) {
+      const next = Math.min(26, Math.max(13, fontSize + delta));
+      if (next === fontSize) return;
+      fontSize = next;
+      applyFontSize();
+      saveSettings();
+      scheduleRepaginate();
+    }
+
+    function scheduleRepaginate(immediate = false) {
+      if (!sourceHtml) return;
+      if (readingView) {
+        paginationDirty = true;
+        return;
+      }
+      clearTimeout(renderTimer);
+      renderTimer = setTimeout(async () => {
+        if (!sourceHtml || readingView) return;
+        const count = await paginate(currentPage);
+        setStatus(`ปรับการแบ่งหน้าใหม่ · หน้า ${currentPage + 1} / ${count}`);
+      }, immediate ? 0 : 350);
     }
 
     /* ================= PDF: ข้อความในไฟล์ ================= */
@@ -1092,14 +1409,14 @@
           .split("\n")
           .map(cleanOcrLine)
           .filter(Boolean)
-          .reduce((joined, line) => joined ? joinLines(joined, line) : line, ""))
+          .reduce((joined, line) =>
+            joined ? joinLines(joined, line) : line, ""))
         .filter(Boolean)
         .map(text => ({ type: "p", text }));
     }
 
     async function ocrPage(page, worker) {
       const canvas = await renderPageToCanvas(page);
-
       try {
         const { data } = await worker.recognize(canvas);
         return ocrTextToBlocks(data.text || "");
@@ -1109,18 +1426,41 @@
       }
     }
 
+    /* ================= ไดอะล็อกรหัสผ่าน PDF ================= */
+
+    function askPassword(retry) {
+      return new Promise(resolve => {
+        const dialog = $("passwordDialog");
+        const input = $("passwordInput");
+
+        $("passwordMsg").textContent = retry
+          ? "รหัสผ่านไม่ถูกต้อง ลองอีกครั้ง"
+          : "กรุณาใส่รหัสผ่านเพื่อเปิดไฟล์";
+        input.value = "";
+
+        dialog.addEventListener("close", () => {
+          resolve(dialog.returnValue === "ok" ? input.value : null);
+        }, { once: true });
+
+        dialog.showModal();
+        requestAnimationFrame(() => input.focus());
+      });
+    }
+
     /* ================= แปลงไฟล์ ================= */
 
     async function convertDocx(file) {
       if (!window.mammoth) throw new Error("LIBRARY_LOAD_FAILED");
 
-      setProgress(0.3, "กำลังเปิดไฟล์ Word…", file.name);
+      setProgress(0.35, "กำลังเปิดไฟล์ Word…", file.name);
       const buffer = await file.arrayBuffer();
       const result = await mammoth.convertToHtml({ arrayBuffer: buffer });
 
       return {
         html: result.value,
-        note: result.messages.length ? "รูปแบบบางส่วนอาจต่างจาก Word" : ""
+        note: result.messages.length
+          ? "ไฟล์ Word (รูปแบบบางส่วนอาจต่างจากต้นฉบับ)"
+          : "ไฟล์ Word"
       };
     }
 
@@ -1143,15 +1483,11 @@
 
       activePdfTask = task;
 
-      task.onPassword = (updatePassword, reason) => {
-        const wrong = reason === pdfjsLib.PasswordResponses.INCORRECT_PASSWORD;
-        const password = prompt(
-          wrong
-            ? "รหัสผ่านไม่ถูกต้อง กรุณาลองอีกครั้ง:"
-            : "PDF นี้มีรหัสผ่าน กรุณาใส่รหัสผ่าน:"
-        );
+      task.onPassword = async (updatePassword, reason) => {
+        const retry = reason === pdfjsLib.PasswordResponses.INCORRECT_PASSWORD;
+        const password = await askPassword(retry);
 
-        if (password === null) {
+        if (password === null || password === "") {
           cancelProcessing();
           setStatus("ยกเลิกการใส่รหัสผ่านแล้ว");
         } else {
@@ -1238,17 +1574,285 @@
       return {
         html: html.join("\n"),
         note: ocrCount
-          ? `ใช้ OCR ${ocrCount} จาก ${total} หน้า PDF`
+          ? `ใช้ OCR ${ocrCount} จาก ${total} หน้า`
           : `PDF ${total} หน้า`
       };
     }
 
-    function renderDocument(name, html, note) {
-      sourceHtml = DOMPurify.sanitize(html);
-      if (!sourceHtml.trim()) {
-        sourceHtml = "<p>ไม่พบเนื้อหาที่แสดงผลได้</p>";
+    /* ================= การแบ่งหน้า ================= */
+
+    // รอรูปภาพและฟอนต์โหลดเสร็จ (มีเวลาจำกัดกันค้าง)
+    function waitAssets(container) {
+      const images = Array.from(container.querySelectorAll("img"));
+      const loads = Promise.all(images.map(img =>
+        img.complete ? Promise.resolve() : new Promise(resolve => {
+          img.addEventListener("load", resolve, { once: true });
+          img.addEventListener("error", resolve, { once: true });
+        })
+      ));
+      const fonts = ("fonts" in document)
+        ? Promise.race([document.fonts.ready, sleep(2000)])
+        : Promise.resolve();
+
+      return Promise.race([Promise.all([loads, fonts]), sleep(5000)]);
+    }
+
+    // สร้างรายการบล็อกของเอกสาร (รอ asset ก่อน เพื่อให้วัดขนาดแม่นยำ)
+    async function ensureDocBlocks() {
+      if (docBlocks.length && !docBlocksDirty) return;
+
+      const template = document.createElement("template");
+      template.innerHTML = sourceHtml;
+      const blocks = [...template.content.children];
+
+      const loader = document.createElement("div");
+      loader.setAttribute("aria-hidden", "true");
+      loader.style.display = "none";
+      loader.append(...blocks);
+      document.body.append(loader);
+
+      try {
+        await waitAssets(loader);
+      } finally {
+        loader.remove();
       }
 
+      docBlocks = blocks;
+      docBlocksDirty = false;
+    }
+
+    function pageTargetHeight() {
+      const style = getComputedStyle(document.documentElement);
+      const size = parseFloat(style.getPropertyValue("--reader-size"));
+      const lh = parseFloat(style.getPropertyValue("--line-height"));
+      const lines = parseFloat(style.getPropertyValue("--page-lines"));
+      return (size || 17) * (lh || 1.75) * (lines || 50);
+    }
+
+    async function paginate(fromPage = 0) {
+      if (!sourceHtml) return 0;
+
+      const token = ++paginateToken;
+      docBlocksDirty = true;
+
+      pagesHost.replaceChildren();
+      pageElements = [];
+      pageFirstBlock = [];
+      updateNav();
+
+      await ensureDocBlocks();
+      if (token !== paginateToken) return 0;
+
+      // คอนเทนเนอร์วัดขนาด (ซ่อนนอกจอ กว้างเท่าหน้าจริง)
+      const measure = document.createElement("div");
+      measure.className = "sheet";
+      measure.setAttribute("aria-hidden", "true");
+      Object.assign(measure.style, {
+        position: "absolute",
+        left: "-10000px",
+        top: "0",
+        visibility: "hidden",
+        pointerEvents: "none"
+      });
+      const mFlow = document.createElement("div");
+      mFlow.className = "flow";
+      measure.append(mFlow);
+      pagesHost.append(measure);
+
+      const targetH = pageTargetHeight() + 2;
+      const pages = [];
+
+      const packCurrent = () => {
+        if (mFlow.children.length) pages.push([...mFlow.children]);
+      };
+
+      for (let i = 0; i < docBlocks.length; i++) {
+        const block = docBlocks[i];
+        block._i = i;
+        mFlow.append(block);
+
+        if (mFlow.scrollHeight > targetH && mFlow.children.length > 1) {
+          // หน้าเต็มแล้ว — หัวข้อท้ายหน้ายกไปรวมกับบล็อกถัดไป (กัน orphan)
+          const carry = [block];
+          block.remove();
+
+          while (mFlow.lastElementChild &&
+                 /^H[1-6]$/.test(mFlow.lastElementChild.tagName)) {
+            carry.unshift(mFlow.lastElementChild);
+            mFlow.lastElementChild.remove();
+          }
+
+          packCurrent();
+          mFlow.replaceChildren(...carry);
+        }
+      }
+      packCurrent();
+      measure.remove();
+
+      if (!pages.length) {
+        const message = document.createElement("p");
+        message.textContent = "ไม่พบเนื้อหาที่แสดงผลได้";
+        pages.push([message]);
+      }
+
+      const total = pages.length;
+
+      pages.forEach((pageBlocks, index) => {
+        const sheet = document.createElement("section");
+        sheet.className = "sheet";
+        sheet.setAttribute("role", "region");
+        sheet.setAttribute("aria-label", `หน้า ${index + 1} จาก ${total}`);
+
+        const flow = document.createElement("div");
+        flow.className = "flow";
+        pageBlocks.forEach(b => flow.append(b));
+
+        const footer = document.createElement("div");
+        footer.className = "sheet-footer";
+        footer.setAttribute("aria-hidden", "true");
+        footer.setAttribute("translate", "no");
+        footer.textContent = `— หน้า ${index + 1} / ${total} —`;
+
+        sheet.append(flow, footer);
+        sheet._orig = flow.textContent;
+        pageFirstBlock.push(pageBlocks[0]._i ?? 0);
+        pagesHost.append(sheet);
+        pageElements.push(sheet);
+      });
+
+      paginationDirty = false;
+      lastLayoutWidth = pagesHost.clientWidth;
+      updateNav();
+      updateLanguage();
+      showPage(Math.max(0, Math.min(fromPage, total - 1)), false);
+
+      return total;
+    }
+
+    function showPage(index, scroll = true) {
+      if (!pageElements.length) return;
+
+      index = Math.max(0, Math.min(index, pageElements.length - 1));
+      currentPage = index;
+
+      pageElements.forEach((sheet, i) => {
+        sheet.hidden = i !== index;
+      });
+
+      updateNav();
+
+      if (scroll) {
+        pageElements[index].scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    }
+
+    function updateNav() {
+      const total = pageElements.length;
+
+      document.querySelectorAll("[data-nav]").forEach(nav => {
+        nav.hidden = !total;
+        if (!total) return;
+
+        nav.querySelector("[data-total]").textContent = total;
+
+        const input = nav.querySelector("[data-page-input]");
+        input.max = total;
+        input.value = currentPage + 1;
+
+        nav.querySelector('[data-go="-1"]').disabled = currentPage === 0;
+        nav.querySelector('[data-go="1"]').disabled = currentPage >= total - 1;
+
+        const hint = nav.querySelector("[data-hint]");
+        if (hint) {
+          const percent = Math.round(((currentPage + 1) / total) * 100);
+          hint.textContent =
+            `อ่านไปแล้ว ${percent}% · ← → เปลี่ยนหน้า · ` +
+            `Alt + ← → ย้อน/ข้ามบรรทัด · Space พักเสียง`;
+        }
+      });
+    }
+
+    /* ================= มุมมองอ่านต่อเนื่อง ================= */
+
+    async function buildReadingArticle() {
+      await ensureDocBlocks();
+
+      const startFromCurrent =
+        $("readFromPage").checked && pageFirstBlock.length > 0;
+      const startIndex = startFromCurrent
+        ? (pageFirstBlock[Math.min(currentPage, pageFirstBlock.length - 1)] ?? 0)
+        : 0;
+
+      const frag = document.createDocumentFragment();
+      for (let i = startIndex; i < docBlocks.length; i++) {
+        frag.append(docBlocks[i].cloneNode(true));
+      }
+
+      const body = $("readerBody");
+      body.replaceChildren(frag);
+      body.lang = $("sourceLanguage").value;
+      $("readerTitle").textContent = currentFileName || "เอกสาร";
+    }
+
+    async function toggleReadingView() {
+      if (!sourceHtml) return;
+
+      readingView = !readingView;
+      document.body.classList.toggle("reading-view", readingView);
+      $("readingViewBtn").textContent = readingView
+        ? "↩ กลับมุมมองแบ่งหน้า"
+        : "📖 Reading mode (Edge)";
+      stopReading();
+
+      if (readingView) {
+        await buildReadingArticle();
+        $("readerArticle").hidden = false;
+        setStatus("มุมมองอ่านต่อเนื่อง · กด F9 เพื่อเปิด Reading mode ของ Edge" +
+          " แล้วใช้เครื่องมืออ่านออกเสียงของ Edge ได้เลย");
+      } else {
+        $("readerArticle").hidden = true;
+
+        if (paginationDirty || !pageElements.length) {
+          const count = await paginate(currentPage);
+          setStatus(`กลับสู่มุมมองแบ่งหน้า · หน้า ${currentPage + 1} / ${count}`);
+        } else {
+          showPage(currentPage, false);
+          setStatus(`หน้า ${currentPage + 1} / ${pageElements.length}`);
+        }
+      }
+
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+
+    function updateLanguage() {
+      const lang = $("sourceLanguage").value;
+      document.querySelectorAll(".flow").forEach(flow => {
+        flow.lang = lang;
+      });
+      $("readerBody").lang = lang;
+    }
+
+    /* ================= เปิด / ปิดเอกสาร ================= */
+
+    function updateDocButtons() {
+      const loaded = !!sourceHtml;
+      $("readingViewBtn").disabled = !loaded;
+      $("fullscreenBtn").disabled = !loaded;
+      $("closeDocBtn").disabled = !loaded;
+    }
+
+    async function renderDocument(name, html, note) {
+      let clean = DOMPurify.sanitize(html || "");
+      if (!clean.trim()) clean = "<p>ไม่พบเนื้อหาที่แสดงผลได้</p>";
+
+      sourceHtml = clean;
+      currentFileName = name;
+      docBlocksDirty = true;
+      pageFirstBlock = [];
+      currentPage = 0;
+      translationWatchActive = true;
+
+      // ตรวจภาษาของเอกสารแล้วตั้งค่าให้อัตโนมัติ
       const template = document.createElement("template");
       template.innerHTML = sourceHtml;
       const guessed = guessLanguage(template.content.textContent || "");
@@ -1259,34 +1863,37 @@
       } else if (["th", "ja", "ko", "zh-CN"].includes(languageSelect.value)) {
         languageSelect.value = "en";
       }
+      saveSettings();
 
       $("welcome").hidden = true;
       $("documentTitle").textContent = name;
       document.title = `${name} — อ่านสบาย`;
 
-      $("fullscreenBtn").disabled = false;
-      $("readingViewBtn").disabled = false;
+      $("fileCard").hidden = false;
+      $("fileCardName").textContent = name;
+      $("fileCardMeta").textContent =
+        (lastFile ? formatBytes(lastFile.size) : "") +
+        (note ? ` · ${note}` : "");
+
+      updateDocButtons();
       $("audioPanel").hidden = false;
       $("playBtn").disabled = !speechSupported;
-
-      currentPage = 0;
+      stopReading();
 
       if (readingView) {
         paginationDirty = true;
-        buildReadingArticle();
+        await buildReadingArticle();
+        $("readerArticle").hidden = false;
+        setStatus("เปิดเอกสารในมุมมองอ่านต่อเนื่อง · กด F9 เพื่อเปิด Reading mode ของ Edge");
       } else {
-        paginate(0);
+        const count = await paginate(0);
+        setStatus(
+          `แบ่งเนื้อหาเป็น ${count} หน้า · หน้าละประมาณ ${$("pageLength").value} บรรทัด` +
+          (note ? ` · ${note}` : "")
+        );
       }
 
-      updateLanguage();
-
-      setStatus(
-        readingView
-          ? "เปิดเอกสารในมุมมองอ่านต่อเนื่อง · กด F9 เพื่อเปิด Reading mode ของ Edge"
-          : `แบ่งเป็น ${pageElements.length} หน้า (หน้าละประมาณ 50 บรรทัด)`
-      );
-
-      if (note) setStatus($("status").textContent + ` · ${note}`);
+      window.scrollTo({ top: 0 });
     }
 
     async function openFile(file) {
@@ -1298,15 +1905,15 @@
 
       const name = file.name.toLowerCase();
       const isPdf = name.endsWith(".pdf") || file.type === "application/pdf";
-      const isDocx = name.endsWith(".docx");
+      const isDocx = name.endsWith(".docx") ||
+        file.type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 
       if (!isPdf && !isDocx) {
-        setStatus("รองรับเฉพาะไฟล์ .docx และ .pdf");
+        setStatus("รองรับเฉพาะไฟล์ .docx และ .pdf เท่านั้น", "error");
         return;
       }
-
       if (!window.DOMPurify) {
-        setStatus("โหลดไลบรารีไม่สำเร็จ กรุณาตรวจสอบอินเทอร์เน็ต");
+        setStatus("โหลดไลบรารีไม่สำเร็จ กรุณาตรวจสอบอินเทอร์เน็ตแล้วรีเฟรช", "error");
         return;
       }
 
@@ -1320,50 +1927,99 @@
           : await convertDocx(file);
 
         checkCancelled(request);
-        renderDocument(file.name, html, note);
+        await renderDocument(file.name, html, note);
       } catch (error) {
         if (request !== fileRequest || error?.name === "AbortError") return;
 
         console.error(error);
 
         if (error?.message === "LIBRARY_LOAD_FAILED") {
-          setStatus("โหลดไลบรารีไม่สำเร็จ กรุณาตรวจสอบอินเทอร์เน็ต");
+          setStatus("โหลดไลบรารีไม่สำเร็จ กรุณาตรวจสอบอินเทอร์เน็ต", "error");
         } else if (error?.name === "PasswordException") {
-          setStatus("ไม่สามารถเปิด PDF ที่มีรหัสผ่านได้");
+          setStatus("ไม่สามารถเปิด PDF ที่มีรหัสผ่านได้", "error");
         } else if (error?.name === "InvalidPDFException") {
-          setStatus("ไฟล์ PDF เสียหายหรือไม่ใช่ PDF ที่ถูกต้อง");
+          setStatus("ไฟล์ PDF เสียหายหรือไม่ใช่ PDF ที่ถูกต้อง", "error");
         } else if (isPdf) {
-          setStatus("เปิด PDF ไม่สำเร็จ ลองเปลี่ยนโหมด PDF แล้วประมวลผลใหม่");
+          setStatus("เปิด PDF ไม่สำเร็จ ลองเปลี่ยน «โหมด PDF» แล้วกด «ประมวลผล PDF ใหม่»", "error");
         } else {
-          setStatus("เปิดไฟล์ไม่สำเร็จ กรุณาตรวจสอบไฟล์ DOCX");
+          setStatus("เปิดไฟล์ไม่สำเร็จ กรุณาตรวจสอบไฟล์ DOCX", "error");
         }
       } finally {
         if (request === fileRequest) hideProgress();
       }
     }
 
-    $("reprocessBtn").addEventListener("click", () => {
-      if (lastFile) openFile(lastFile);
-    });
+    function clearDocument() {
+      cancelProcessing();
+      stopReading();
+
+      sourceHtml = "";
+      currentFileName = "";
+      lastFile = null;
+      docBlocks = [];
+      docBlocksDirty = true;
+      pageFirstBlock = [];
+      pageElements = [];
+      readingView = false;
+      paginationDirty = false;
+
+      document.body.classList.remove("reading-view");
+      $("readingViewBtn").textContent = "📖 Reading mode (Edge)";
+      if (document.fullscreenElement) {
+        document.exitFullscreen().catch(() => {});
+      }
+
+      pagesHost.replaceChildren();
+      $("readerArticle").hidden = true;
+      $("welcome").hidden = false;
+      $("fileCard").hidden = true;
+      $("audioPanel").hidden = true;
+      $("reprocessBtn").disabled = true;
+
+      $("documentTitle").textContent = "พร้อมสำหรับการอ่าน";
+      document.title = "อ่านสบาย — DOCX & PDF Reader";
+
+      hideProgress();
+      updateDocButtons();
+      updateNav();
+      setStatus("เลือกไฟล์ DOCX หรือ PDF เพื่อเริ่มต้น");
+      window.scrollTo({ top: 0 });
+    }
 
     /* ================= เสียง ================= */
 
     const isThai = voice => voice.lang.toLowerCase().startsWith("th");
 
     function defaultVoiceIndex() {
-      let index = voices.findIndex(v => DEFAULT_VOICE_PATTERN.test(v.name));
-      if (index < 0) {
-        index = voices.findIndex(v => isThai(v) && /natural|neural/i.test(v.name));
+      const lang = spokenLanguage();
+      const wantThai = translatedMode() || lang.toLowerCase().startsWith("th");
+
+      if (wantThai) {
+        let index = voices.findIndex(v =>
+          isThai(v) && DEFAULT_VOICE_PATTERN.test(v.name));
+        if (index < 0) {
+          index = voices.findIndex(v =>
+            isThai(v) && /natural|neural/i.test(v.name));
+        }
+        if (index < 0) index = voices.findIndex(isThai);
+        return index;
       }
-      if (index < 0) index = voices.findIndex(isThai);
+
+      const prefix = lang.split("-")[0].toLowerCase();
+      const match = v => v.lang.toLowerCase().startsWith(prefix);
+      let index = voices.findIndex(v => match(v) && /natural|neural/i.test(v.name));
+      if (index < 0) index = voices.findIndex(match);
+      if (index < 0) {
+        index = voices.findIndex(v =>
+          isThai(v) && DEFAULT_VOICE_PATTERN.test(v.name));
+      }
       return index;
     }
 
     function voiceForLanguage(language) {
       const prefix = language.split("-")[0].toLowerCase();
       const matching = voices.filter(v =>
-        v.lang.toLowerCase().startsWith(prefix)
-      );
+        v.lang.toLowerCase().startsWith(prefix));
       return matching.find(v => /natural|neural/i.test(v.name)) ||
         matching[0] || null;
     }
@@ -1391,13 +2047,9 @@
       const available = speechSynthesis.getVoices();
       if (!available.length) return;
 
-      const oldVoice = voiceSelect.value === ""
-        ? null
-        : voices[Number(voiceSelect.value)];
-
       voices = available;
       voiceSelect.replaceChildren(
-        new Option("อัตโนมัติ (ตามภาษาต้นฉบับ)", "")
+        new Option("อัตโนมัติ (ตามภาษาเอกสาร)", "")
       );
 
       const thaiGroup = document.createElement("optgroup");
@@ -1406,7 +2058,8 @@
       otherGroup.label = "ภาษาอื่น";
 
       voices.forEach((voice, index) => {
-        const option = new Option(`${voice.name} (${voice.lang})`, String(index));
+        const option = new Option(
+          `${voice.name} (${voice.lang})`, String(index));
         (isThai(voice) ? thaiGroup : otherGroup).append(option);
       });
 
@@ -1414,14 +2067,9 @@
       if (otherGroup.children.length) voiceSelect.append(otherGroup);
 
       let index = -1;
-
-      if (userPickedVoice) {
-        if (oldVoice) {
-          index = voices.findIndex(v =>
-            v.name === oldVoice.name && v.lang === oldVoice.lang
-          );
-        }
-      } else {
+      if (userPickedVoice && pickedVoiceKey) {
+        index = voices.findIndex(v => `${v.name}|${v.lang}` === pickedVoiceKey);
+      } else if (!userPickedVoice) {
         index = defaultVoiceIndex();
       }
 
@@ -1435,15 +2083,14 @@
       if (voiceSelect.value !== "") {
         return voices[Number(voiceSelect.value)] || null;
       }
-
       if (!userPickedVoice) {
         const index = defaultVoiceIndex();
         if (index >= 0) return voices[index];
       }
-
       return voiceForLanguage(spokenLanguage());
     }
 
+    // ตัดข้อความยาวเป็นท่อนสั้น ๆ กันเสียงค้าง/ถูกตัดกลางคัน
     function splitSpeech(text, language, maxLength = 160) {
       text = text.replace(/\s+/g, " ").trim();
       if (!text) return [];
@@ -1496,14 +2143,13 @@
       element.classList.add("speaking");
 
       const rect = element.getBoundingClientRect();
-      if (rect.top < 90 || rect.bottom > window.innerHeight - 150) {
+      if (rect.top < 100 || rect.bottom > window.innerHeight - 160) {
         element.scrollIntoView({ behavior: "smooth", block: "center" });
       }
     }
 
     /* ----- การแปลของ Edge ----- */
 
-    // Edge ใส่ class translated-ltr/rtl ที่ <html> หรือ attribute _msttexthash ที่ข้อความที่แปลแล้ว
     function translatedMode() {
       return /\btranslated-(ltr|rtl)\b/.test(document.documentElement.className) ||
         !!document.querySelector("[_msttexthash]");
@@ -1515,10 +2161,10 @@
         : $("sourceLanguage").value;
     }
 
-    const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
-
-    // รอให้ Edge แปลหน้านี้เสร็จ (ถ้าเปิดการแปลอยู่) แล้วค่อยอ่านข้อความที่แปลแล้ว
+    // รอให้ Edge แปลหน้านี้เสร็จ (ถ้าเปิดการแปลอยู่) แล้วค่อยอ่านฉบับแปล
     async function waitForTranslation(pageIndex, session) {
+      if (!translationWatchActive) return;
+
       const page = pageElements[pageIndex];
       if (!page || !translatedMode()) return;
 
@@ -1537,25 +2183,30 @@
           if (session !== speechSession) return;
         }
 
-        if (!changed()) return; // ไม่มีการแปล: อ่านข้อความต้นฉบับต่อ
+        if (!changed()) {
+          // ไม่มีการแปลเกิดขึ้น — เลิกรอหน้าถัดไปเพื่อไม่เสียเวลา
+          translationWatchActive = false;
+          return;
+        }
       }
 
-      await sleep(500); // ให้ Edge แปลส่วนที่เหลือของหน้าให้เสร็จ
+      await sleep(500); // ให้ Edge แปลส่วนที่เหลือของหน้าให้จบ
     }
 
     /* ----- ควบคุมการอ่าน ----- */
 
-    // ต้อง resume ก่อน cancel ไม่เช่นนั้นเสียงรอบถัดไปจะค้างในสถานะพัก
+    // ต้อง resume ก่อน cancel ไม่เช่นนั้นรอบถัดไปจะค้างในสถานะพัก
     function cancelSpeech() {
       if (!speechSupported) return;
       if (speechSynthesis.paused) speechSynthesis.resume();
       speechSynthesis.cancel();
-      $("pauseBtn").textContent = "พักเสียง";
+      $("pauseBtn").textContent = "⏸ พัก";
     }
 
     function stopReading() {
       speechSession++;
       utteranceId++;
+      currentUtterance = null;
       clearTimeout(pageDelayTimer);
       delayPending = false;
       speechLoading = false;
@@ -1567,11 +2218,19 @@
 
       cancelSpeech();
       setHighlight(null);
+      $("speechPos").textContent = "";
 
       $("pauseBtn").disabled = true;
       $("stopBtn").disabled = true;
       $("prevBtn").disabled = true;
       $("nextBtn").disabled = true;
+    }
+
+    function updateSpeechPos() {
+      $("speechPos").textContent = speechItems.length
+        ? `หน้า ${speechPage + 1}/${pageElements.length} · บรรทัด ` +
+          `${Math.max(1, Math.min(currentlySpeakingIndex + 1, speechItems.length))}/${speechItems.length}`
+        : "";
     }
 
     // ดึงข้อความของหน้านั้น "ตอนที่จะอ่านจริง" เพื่อให้ได้ข้อความที่ Edge แปลแล้ว
@@ -1593,6 +2252,7 @@
 
     async function startPage(session, pageIndex, from = "first") {
       if (session !== speechSession) return;
+      if (readingView || !pageElements.length) return;
 
       speechLoading = true;
       speechPage = pageIndex;
@@ -1603,12 +2263,14 @@
 
       const voice = resolveVoice();
       speechItems = collectPageItems(pageIndex, voice?.lang || "th");
-      speechIndex = from === "last" ? Math.max(0, speechItems.length - 1) : 0;
+      speechIndex = from === "last"
+        ? Math.max(0, speechItems.length - 1)
+        : 0;
       currentlySpeakingIndex = -1;
       speechLoading = false;
 
       if (!speechItems.length) {
-        advancePage(session, 0); // หน้าว่าง: ข้ามไปหน้าถัดไป
+        advancePage(session, 0); // หน้าว่าง: ข้ามไปหน้าถัดไปทันที
         return;
       }
 
@@ -1616,10 +2278,11 @@
         `กำลังอ่านออกเสียงหน้า ${pageIndex + 1} ` +
         `ด้วย ${voice?.name || "เสียงเริ่มต้นของระบบ"}`
       );
+      updateSpeechPos();
       speakNext(session);
     }
 
-    // อ่านจบหน้า: เลื่อนไปหน้าถัดไปทันที แล้วหยุดรอ (PAGE_DELAY_MS) ก่อนเริ่มอ่านต่อ
+    // อ่านจบหน้า: เลื่อนไปหน้าถัดไป พักสักครู่ แล้วค่อยอ่านต่อ
     function advancePage(session, delay = PAGE_DELAY_MS) {
       if (session !== speechSession) return;
 
@@ -1627,7 +2290,7 @@
 
       if (next >= pageElements.length) {
         stopReading();
-        setStatus("อ่านเอกสารจบแล้ว");
+        setStatus("อ่านเอกสารจบแล้ว 🎉");
         return;
       }
 
@@ -1642,8 +2305,8 @@
       speechLoading = true;
       showPage(next);
       setStatus(
-        `เลื่อนไปหน้า ${next + 1} แล้ว · ` +
-        `จะเริ่มอ่านต่อใน ${delay / 1000} วินาที…`
+        `เลื่อนไปหน้า ${next + 1} แล้ว · จะเริ่มอ่านต่อใน ${delay / 1000} วินาที ` +
+        `(กด «⏭ ข้าม» เพื่ออ่านทันที)`
       );
 
       delayPending = true;
@@ -1673,10 +2336,11 @@
 
       utterance.lang = voice?.lang || "th-TH";
       if (voice) utterance.voice = voice;
-      utterance.rate = Number($("rateInput").value);
+      utterance.rate = Number($("rateInput").value) || 0.9;
       utterance.pitch = 1;
 
       setHighlight(item.element);
+      updateSpeechPos();
 
       utterance.onend = () => {
         if (id === utteranceId) speakNext(session);
@@ -1685,25 +2349,33 @@
         if (session !== speechSession || id !== utteranceId) return;
         if (["canceled", "interrupted"].includes(event.error)) return;
         stopReading();
-        setStatus("อ่านออกเสียงไม่สำเร็จ กรุณาตรวจสอบอินเทอร์เน็ตหรือลองเลือกเสียงอื่น");
+        setStatus("อ่านออกเสียงไม่สำเร็จ กรุณาตรวจสอบอินเทอร์เน็ต หรือลองเลือกเสียงอื่น", "error");
       };
 
+      currentUtterance = utterance; // กัน utterance โดน GC ก่อน onend (บั๊ก Chrome)
       speechSynthesis.speak(utterance);
     }
 
     function skipNext() {
+      if (readingView) return;
+
       // กำลังรอก่อนอ่านหน้าใหม่: ข้ามการรอแล้วอ่านเลย
       if (delayPending) {
         clearTimeout(pageDelayTimer);
         delayPending = false;
-        startPage(speechSession, pendingPage);
+        const next = pendingPage;
+        pendingPage = -1;
+        startPage(speechSession, next);
         return;
       }
 
-      if (speechLoading) return;
+      if (speechLoading) {
+        setStatus("กำลังเตรียมเสียง รอสักครู่…");
+        return;
+      }
 
-      if (speechItems.length === 0) {
-        setStatus("ยังไม่มีอะไรให้อ่าน กด «▶ อ่านจากหน้านี้» ก่อน");
+      if (!speechItems.length) {
+        setStatus("ยังไม่ได้เริ่มอ่าน กด «▶ อ่านจากหน้านี้» ก่อน");
         return;
       }
 
@@ -1712,7 +2384,7 @@
       const lastPage = speechPage >= pageElements.length - 1;
 
       if (next >= speechItems.length && lastPage) {
-        setStatus("⏭ อยู่บรรทัดสุดท้ายแล้ว");
+        setStatus("⏭ อยู่บรรทัดสุดท้ายของเอกสารแล้ว");
         return;
       }
 
@@ -1731,10 +2403,32 @@
     }
 
     function goPrev() {
-      if (delayPending || speechLoading) return;
+      if (readingView) return;
 
-      if (speechItems.length === 0) {
-        setStatus("ยังไม่มีอะไรให้อ่าน กด «▶ อ่านจากหน้านี้» ก่อน");
+      // กำลังรอก่อนอ่านหน้าใหม่: ยกเลิกการรอ แล้วกลับไปอ่านบรรทัดสุดท้ายเดิม
+      if (delayPending) {
+        clearTimeout(pageDelayTimer);
+        delayPending = false;
+        pendingPage = -1;
+        speechLoading = false;
+        showPage(speechPage, false);
+
+        if (speechItems.length) {
+          speechIndex = speechItems.length - 1;
+          currentlySpeakingIndex = speechIndex - 1;
+          setStatus(`ย้อนไปอ่านบรรทัดสุดท้ายของหน้า ${speechPage + 1} อีกครั้ง`);
+          setTimeout(() => speakNext(speechSession), 30);
+        }
+        return;
+      }
+
+      if (speechLoading) {
+        setStatus("กำลังเตรียมเสียง รอสักครู่…");
+        return;
+      }
+
+      if (!speechItems.length) {
+        setStatus("ยังไม่ได้เริ่มอ่าน กด «▶ อ่านจากหน้านี้» ก่อน");
         return;
       }
 
@@ -1743,647 +2437,353 @@
       utteranceId++;
       cancelSpeech();
 
-      if (currentlySpeakingIndex <= 0) {
-        if (speechPage > 0) {
-          setStatus(`ย้อนไปหน้า ${speechPage}`);
-          startPage(session, speechPage - 1, "last");
-          return;
-        }
+      const prev = currentlySpeakingIndex - 1;
 
-        speechIndex = 0;
-        setStatus("⏮ อยู่บรรทัดแรกแล้ว");
-      } else {
-        speechIndex = currentlySpeakingIndex - 1;
-        setStatus(`ย้อนไปยังบรรทัดที่ ${speechIndex + 1} ของหน้านี้`);
-      }
-
-      setTimeout(() => speakNext(session), 30);
-    }
-
-    $("playBtn").addEventListener("click", () => {
-      if (!speechSupported) return;
-
-      stopReading();
-
-      $("pauseBtn").disabled = false;
-      $("stopBtn").disabled = false;
-      $("prevBtn").disabled = false;
-      $("nextBtn").disabled = false;
-
-      startPage(speechSession, currentPage);
-    });
-
-    $("pauseBtn").addEventListener("click", () => {
-      if (speechSynthesis.paused) {
-        speechSynthesis.resume();
-        $("pauseBtn").textContent = "พักเสียง";
-        setStatus("กำลังอ่านออกเสียง");
-      } else {
-        speechSynthesis.pause();
-        $("pauseBtn").textContent = "อ่านต่อ";
-        setStatus("พักการอ่านออกเสียง");
-      }
-    });
-
-    $("stopBtn").addEventListener("click", () => {
-      stopReading();
-      setStatus("หยุดอ่านออกเสียงแล้ว");
-    });
-
-    $("prevBtn").addEventListener("click", goPrev);
-    $("nextBtn").addEventListener("click", skipNext);
-
-    $("rateInput").addEventListener("input", event => {
-      $("rateValue").textContent = `${Number(event.target.value).toFixed(2)}×`;
-    });
-
-    voiceSelect.addEventListener("change", () => {
-      userPickedVoice = true;
-      stopReading();
-    });
-
-    /* ================= แบ่งหน้า ================= */
-
-    function makePage() {
-      const sheet = document.createElement("section");
-      sheet.className = "sheet";
-      sheet.lang = $("sourceLanguage").value;
-
-      const flow = document.createElement("div");
-      flow.className = "flow";
-      sheet.append(flow);
-      pagesHost.append(sheet);
-      pageElements.push(sheet);
-
-      return flow;
-    }
-
-    function fits(flow) {
-      return flow.scrollHeight <= flow.clientHeight + 2;
-    }
-
-    function getTextNodes(block) {
-      const nodes = [];
-      const walker = document.createTreeWalker(block, NodeFilter.SHOW_TEXT);
-      while (walker.nextNode()) nodes.push(walker.currentNode);
-      return nodes;
-    }
-
-    // ตัดตามขอบเขตคำ ไม่ตัดกลางพยัญชนะ/สระ/วรรณยุกต์ไทย
-    function getBoundaries(text) {
-      const result = [0];
-
-      if ("Segmenter" in Intl) {
-        const segmenter = new Intl.Segmenter($("sourceLanguage").value, {
-          granularity: "word"
-        });
-        for (const s of segmenter.segment(text)) {
-          result.push(s.index + s.segment.length);
-        }
-      } else {
-        let offset = 0;
-        for (const character of text) {
-          offset += character.length;
-          result.push(offset);
-        }
-      }
-
-      return result;
-    }
-
-    function sliceBlock(block, start, end, textNodes) {
-      const range = document.createRange();
-      let position = 0;
-      let startSet = false;
-
-      for (const node of textNodes) {
-        const nodeStart = position;
-        const nodeEnd = position + node.textContent.length;
-
-        if (!startSet && start <= nodeEnd) {
-          range.setStart(node, Math.max(0, start - nodeStart));
-          startSet = true;
-        }
-
-        if (end <= nodeEnd) {
-          range.setEnd(node, Math.max(0, end - nodeStart));
-          break;
-        }
-
-        position = nodeEnd;
-      }
-
-      const copy = block.cloneNode(false);
-      copy.append(range.cloneContents());
-      return copy;
-    }
-
-    function addBlock(block, activeFlow) {
-      const whole = block.cloneNode(true);
-      activeFlow.append(whole);
-      if (fits(activeFlow)) return activeFlow;
-      whole.remove();
-
-      // ลิสต์ยาว: แบ่งทีละรายการ
-      if (/^(UL|OL)$/.test(block.tagName) && block.children.length > 1) {
-        let number = Number(block.getAttribute("start")) || 1;
-
-        for (const item of block.children) {
-          const shell = block.cloneNode(false);
-          if (block.tagName === "OL") shell.setAttribute("start", String(number));
-          number++;
-          shell.append(item.cloneNode(true));
-          activeFlow = addBlock(shell, activeFlow);
-        }
-
-        return activeFlow;
-      }
-
-      if (activeFlow.childNodes.length) {
-        const nextFlow = makePage();
-        nextFlow.append(whole);
-        if (fits(nextFlow)) return nextFlow;
-        whole.remove();
-        activeFlow = nextFlow;
-      }
-
-      const splittable =
-        /^(P|H1|H2|H3|H4|H5|H6|BLOCKQUOTE)$/.test(block.tagName) &&
-        !block.querySelector("img, table");
-
-      if (!splittable) {
-        activeFlow.append(block.cloneNode(true));
-        return activeFlow;
-      }
-
-      const textNodes = getTextNodes(block);
-      const text = block.textContent || "";
-
-      if (!textNodes.length || !text.trim()) {
-        activeFlow.append(block.cloneNode(true));
-        return activeFlow;
-      }
-
-      const boundaries = getBoundaries(text);
-      let startIndex = 0;
-
-      while (startIndex < boundaries.length - 1) {
-        let low = startIndex + 1;
-        let high = boundaries.length - 1;
-        let best = startIndex;
-
-        while (low <= high) {
-          const mid = Math.floor((low + high) / 2);
-          const candidate = sliceBlock(
-            block, boundaries[startIndex], boundaries[mid], textNodes
-          );
-
-          activeFlow.append(candidate);
-          const accepted = fits(activeFlow);
-          candidate.remove();
-
-          if (accepted) {
-            best = mid;
-            low = mid + 1;
-          } else {
-            high = mid - 1;
-          }
-        }
-
-        if (best === startIndex) {
-          if (activeFlow.childNodes.length) {
-            activeFlow = makePage();
-            continue;
-          }
-          best = startIndex + 1;
-        }
-
-        activeFlow.append(sliceBlock(
-          block, boundaries[startIndex], boundaries[best], textNodes
-        ));
-
-        startIndex = best;
-        if (startIndex < boundaries.length - 1) activeFlow = makePage();
-      }
-
-      return activeFlow;
-    }
-
-    function showPage(index, scroll = true) {
-      if (!pageElements.length) return;
-
-      currentPage = Math.max(0, Math.min(index, pageElements.length - 1));
-
-      pageElements.forEach((page, i) => {
-        const active = i === currentPage;
-        page.hidden = !active;
-        page.inert = !active;
-        page.setAttribute("aria-hidden", String(!active));
-      });
-
-      document.querySelectorAll("[data-page-input]").forEach(input => {
-        input.max = String(pageElements.length);
-        if (document.activeElement !== input) input.value = String(currentPage + 1);
-      });
-      document.querySelectorAll("[data-total]").forEach(el => {
-        el.textContent = String(pageElements.length);
-      });
-
-      document.querySelectorAll('[data-go="-1"]').forEach(btn => {
-        btn.disabled = currentPage === 0;
-      });
-      document.querySelectorAll('[data-go="1"]').forEach(btn => {
-        btn.disabled = currentPage === pageElements.length - 1;
-      });
-
-      if (scroll) {
-        document.querySelector("[data-nav]").scrollIntoView({
-          behavior: "smooth",
-          block: "start"
-        });
-      }
-    }
-
-    // ตำแหน่งตัวอักษร (ในต้นฉบับ) ที่หน้านั้นเริ่มต้น
-    function pageOffset(index) {
-      let total = 0;
-      for (let i = 0; i < index; i++) total += pageElements[i]._orig.length;
-      return total;
-    }
-
-    function pageForOffset(offset) {
-      let total = 0;
-      for (let i = 0; i < pageElements.length; i++) {
-        total += pageElements[i]._orig.length;
-        if (offset < total) return i;
-      }
-      return Math.max(0, pageElements.length - 1);
-    }
-
-    function paginate(keepPage = 0, keepOffset = null) {
-      if (!sourceHtml) return;
-
-      if (readingView) {
-        paginationDirty = true;
+      if (prev >= 0) {
+        speechIndex = prev;
+        setStatus(`ย้อนไปยังบรรทัดที่ ${prev + 1} ของหน้านี้`);
+        setTimeout(() => speakNext(session), 30);
         return;
       }
 
-      stopReading();
-      pagesHost.replaceChildren();
-      pageElements = [];
-      lastLayoutWidth = pagesHost.clientWidth;
-
-      const template = document.createElement("template");
-      template.innerHTML = sourceHtml;
-
-      let flow = makePage();
-
-      for (const block of [...template.content.childNodes]) {
-        if (block.nodeType !== Node.ELEMENT_NODE) continue;
-        flow = addBlock(block, flow);
+      if (speechPage > 0) {
+        startPage(session, speechPage - 1, "last"); // ไปบรรทัดสุดท้ายของหน้าก่อน
+        return;
       }
 
-      if (pageElements.length > 1 &&
-          !pageElements.at(-1).firstElementChild?.childNodes.length) {
-        pageElements.pop().remove();
-      }
-
-      // เก็บข้อความต้นฉบับ ใช้ตรวจว่า Edge แปลหน้านั้นแล้วหรือยัง
-      for (const page of pageElements) {
-        page._orig = page.querySelector(".flow").textContent;
-      }
-
-      document.querySelectorAll("[data-nav]").forEach(nav => {
-        nav.hidden = false;
-      });
-
-      // รูปที่ยังโหลดไม่เสร็จทำให้ความสูงที่วัดผิด: แบ่งหน้าใหม่เมื่อโหลดเสร็จ
-      for (const image of pagesHost.querySelectorAll("img")) {
-        if (!image.complete) {
-          image.addEventListener("load", schedulePagination, { once: true });
-        }
-      }
-
-      showPage(
-        keepOffset === null ? keepPage : pageForOffset(keepOffset),
-        false
-      );
-      setStatus(`แบ่งเอกสารเป็น ${pageElements.length} หน้า (หน้าละประมาณ 50 บรรทัด)`);
+      speechIndex = 0;
+      setStatus("อยู่บรรทัดแรกสุดแล้ว เริ่มอ่านบรรทัดแรกใหม่");
+      setTimeout(() => speakNext(session), 30);
     }
 
-    function schedulePagination() {
+    function playFrom(pageIndex) {
+      if (!speechSupported || readingView || !pageElements.length) return;
+
+      stopReading();
+      const session = speechSession;
+
+      ["pauseBtn", "stopBtn", "prevBtn", "nextBtn"].forEach(id => {
+        $(id).disabled = false;
+      });
+
+      startPage(session, pageIndex);
+    }
+
+    function togglePause() {
+      if (!speechSupported) return;
+
+      if (speechSynthesis.paused) {
+        speechSynthesis.resume();
+        $("pauseBtn").textContent = "⏸ พัก";
+      } else if (speechSynthesis.speaking || speechSynthesis.pending) {
+        speechSynthesis.pause();
+        $("pauseBtn").textContent = "▶ เล่นต่อ";
+      }
+    }
+
+    /* ================= อีเวนต์ทั่วไป ================= */
+
+    function onKeydown(event) {
+      const target = event.target;
+      if (target instanceof HTMLElement &&
+          (target.matches("input, select, textarea, [contenteditable]") ||
+           target.isContentEditable)) {
+        return;
+      }
+      if (document.querySelector("dialog[open]")) return;
+
+      if (event.key === "F9") {
+        if (sourceHtml) {
+          event.preventDefault();
+          toggleReadingView();
+        }
+        return;
+      }
+
+      if (event.key === "?") {
+        $("shortcutsDialog").showModal();
+        return;
+      }
+
       if (!sourceHtml) return;
 
+      if (event.altKey &&
+          (event.key === "ArrowLeft" || event.key === "ArrowRight")) {
+        event.preventDefault();
+        if (event.key === "ArrowRight") skipNext();
+        else goPrev();
+        return;
+      }
+
+      if (event.key === "ArrowRight") {
+        event.preventDefault();
+        showPage(currentPage + 1);
+        return;
+      }
+
+      if (event.key === "ArrowLeft") {
+        event.preventDefault();
+        showPage(currentPage - 1);
+        return;
+      }
+
+      if (event.key === " " && speechSupported &&
+          (speechSynthesis.speaking || speechSynthesis.paused)) {
+        event.preventDefault();
+        togglePause();
+      }
+    }
+
+    function onResize() {
+      if (!sourceHtml) return;
       if (readingView) {
         paginationDirty = true;
         return;
       }
 
       clearTimeout(renderTimer);
-      const offset = pageElements.length ? pageOffset(currentPage) : 0;
-      renderTimer = setTimeout(() => paginate(0, offset), 180);
+      renderTimer = setTimeout(async () => {
+        if (!sourceHtml || readingView) return;
+
+        const width = pagesHost.clientWidth;
+        if (width && Math.abs(width - lastLayoutWidth) < 32) return;
+
+        const count = await paginate(currentPage);
+        setStatus(`ปรับการแบ่งหน้าตามขนาดหน้าจอ · หน้า ${currentPage + 1} / ${count}`);
+      }, 350);
     }
 
-    // เปลี่ยนหน้าด้วยมือ: ถ้ากำลังอ่านอยู่ ให้หยุดรอ แล้วอ่านต่อจากหน้าที่เปลี่ยนไป
-    function changePage(index) {
-      const reading = speechItems.length > 0 || speechLoading || delayPending;
-      const before = currentPage;
-      showPage(index);
+    function initDragAndDrop() {
+      const zone = $("dropzone");
 
-      if (!reading || currentPage === before) return;
+      window.addEventListener("dragenter", event => {
+        if (!event.dataTransfer ||
+            ![...event.dataTransfer.types].includes("Files")) return;
+        dragDepth++;
+        document.body.classList.add("dropping");
+      });
 
-      const session = ++speechSession;
-      const target = currentPage;
+      window.addEventListener("dragleave", () => {
+        dragDepth = Math.max(0, dragDepth - 1);
+        if (!dragDepth) document.body.classList.remove("dropping");
+      });
 
-      utteranceId++;
-      clearTimeout(pageDelayTimer);
-      cancelSpeech();
-      setHighlight(null);
+      window.addEventListener("dragover", event => event.preventDefault());
 
-      speechItems = [];
-      speechIndex = 0;
-      currentlySpeakingIndex = -1;
-      speechPage = target;
-      pendingPage = target;
-      speechLoading = true;
-      delayPending = true;
+      window.addEventListener("drop", event => {
+        event.preventDefault();
+        dragDepth = 0;
+        document.body.classList.remove("dropping");
+        zone.classList.remove("dragover");
 
-      $("pauseBtn").disabled = false;
-      $("stopBtn").disabled = false;
-      $("prevBtn").disabled = false;
-      $("nextBtn").disabled = false;
+        const file = event.dataTransfer?.files?.[0];
+        if (file) openFile(file);
+      });
 
-      setStatus(
-        `เปลี่ยนเป็นหน้า ${target + 1} แล้ว · ` +
-        `จะอ่านต่อใน ${PAGE_DELAY_MS / 1000} วินาที…`
-      );
-
-      pageDelayTimer = setTimeout(() => {
-        delayPending = false;
-        startPage(session, target);
-      }, PAGE_DELAY_MS);
+      zone.addEventListener("dragover", event => {
+        event.preventDefault();
+        zone.classList.add("dragover");
+      });
+      zone.addEventListener("dragleave", () => zone.classList.remove("dragover"));
+      zone.addEventListener("drop", event => {
+        event.preventDefault();
+        zone.classList.remove("dragover");
+      });
     }
 
-    // กรอกเลขหน้าแล้วกด Enter หรือคลิกออกจากช่องเพื่อไปหน้านั้น
-    function jumpToTypedPage(input) {
-      const value = Math.round(Number(input.value));
+    /* ================= เริ่มต้น ================= */
 
-      if (!input.value.trim() || !Number.isFinite(value)) {
-        input.value = String(currentPage + 1);
-        return;
+    function init() {
+      const saved = loadSettings();
+
+      // ธีม
+      const theme = ["auto", "light", "dark"].includes(saved.theme)
+        ? saved.theme
+        : "auto";
+      $("themeSelect").value = theme;
+      applyTheme(theme);
+      if (themeMedia) {
+        themeMedia.addEventListener("change", () => {
+          if ($("themeSelect").value === "auto") applyTheme("auto");
+        });
       }
 
-      changePage(Math.max(1, Math.min(value, pageElements.length)) - 1);
-      input.value = String(currentPage + 1);
-    }
+      // การอ่าน
+      fontSize = Math.min(26, Math.max(13, Number(saved.fontSize) || 17));
+      applyFontSize();
 
-    document.querySelectorAll("[data-page-input]").forEach(input => {
-      input.addEventListener("keydown", event => {
-        if (event.key === "Enter") {
+      $("pageLength").value = ["35", "50", "70"].includes(String(saved.pageLength))
+        ? String(saved.pageLength)
+        : "50";
+      applyPageLength();
+
+      $("pdfMode").value = saved.pdfMode || "auto";
+      $("ocrLang").value = saved.ocrLang || "tha+eng";
+      $("sourceLanguage").value = saved.sourceLanguage || "en";
+      $("readFromPage").checked = saved.readFromPage !== false;
+      $("rateInput").value = saved.rate || "0.9";
+      $("rateValue").textContent =
+        Number($("rateInput").value).toFixed(2) + "×";
+
+      // ไฟล์
+      $("dropzone").addEventListener("keydown", event => {
+        if (event.key === "Enter" || event.key === " ") {
           event.preventDefault();
-          jumpToTypedPage(input);
-          input.select();
+          $("fileInput").click();
         }
       });
-      input.addEventListener("change", () => jumpToTypedPage(input));
-      input.addEventListener("focus", () => input.select());
-    });
 
-    document.querySelectorAll("[data-go]").forEach(button => {
-      button.addEventListener("click", () => {
-        changePage(currentPage + Number(button.dataset.go));
+      $("fileInput").addEventListener("change", event => {
+        const file = event.target.files?.[0];
+        if (file) openFile(file);
+        event.target.value = ""; // แก้บัค: เปิดไฟล์เดิมซ้ำได้
       });
-    });
 
-    document.addEventListener("keydown", event => {
-      // คีย์ลัดข้าม/ย้อนบรรทัด (ต้องกด Alt ค้าง)
-      if (event.altKey && speechItems.length > 0) {
-        if (event.key === "ArrowRight") {
-          event.preventDefault();
-          skipNext();
-          return;
+      $("welcomePickBtn").addEventListener("click", () => $("fileInput").click());
+      initDragAndDrop();
+
+      // การตั้งค่า
+      $("settingsToggle").addEventListener("click", () => {
+        const open = $("sidebar").classList.toggle("settings-open");
+        $("settingsToggle").setAttribute("aria-expanded", String(open));
+      });
+
+      $("smallerBtn").addEventListener("click", () => changeFontSize(-1));
+      $("largerBtn").addEventListener("click", () => changeFontSize(1));
+
+      $("themeSelect").addEventListener("change", () => {
+        applyTheme($("themeSelect").value);
+        saveSettings();
+      });
+
+      $("pageLength").addEventListener("change", () => {
+        applyPageLength();
+        saveSettings();
+        scheduleRepaginate(true);
+      });
+
+      $("pdfMode").addEventListener("change", () => {
+        saveSettings();
+        if (lastFile && lastFile.name.toLowerCase().endsWith(".pdf")) {
+          setStatus("บันทึกโหมด PDF แล้ว กด «ประมวลผล PDF ใหม่» เพื่อใช้ค่านี้");
         }
-        if (event.key === "ArrowLeft") {
-          event.preventDefault();
-          goPrev();
-          return;
+      });
+
+      $("ocrLang").addEventListener("change", saveSettings);
+
+      $("sourceLanguage").addEventListener("change", () => {
+        updateLanguage();
+        saveSettings();
+      });
+
+      $("readFromPage").addEventListener("change", () => {
+        saveSettings();
+        if (readingView && sourceHtml) buildReadingArticle();
+      });
+
+      $("rateInput").addEventListener("input", () => {
+        $("rateValue").textContent =
+          Number($("rateInput").value).toFixed(2) + "×";
+        saveSettings();
+      });
+
+      $("reprocessBtn").addEventListener("click", () => {
+        if (lastFile) openFile(lastFile);
+      });
+
+      // ไดอะล็อกช่วยเหลือ
+      $("readingHelpBtn").addEventListener("click", () => $("readingDialog").showModal());
+      $("translateHelpBtn").addEventListener("click", () => $("translateDialog").showModal());
+      $("shortcutsBtn").addEventListener("click", () => $("shortcutsDialog").showModal());
+
+      document.querySelectorAll("dialog [data-close]").forEach(button => {
+        button.addEventListener("click", () =>
+          button.closest("dialog").close());
+      });
+
+      // ปุ่มบนแถบหัว
+      $("readingViewBtn").addEventListener("click", toggleReadingView);
+      $("closeDocBtn").addEventListener("click", clearDocument);
+
+      $("fullscreenBtn").addEventListener("click", async () => {
+        try {
+          if (document.fullscreenElement) {
+            await document.exitFullscreen();
+          } else {
+            await document.documentElement.requestFullscreen();
+          }
+        } catch {
+          setStatus("สลับโหมดเต็มจอไม่สำเร็จ", "error");
         }
-      }
+      });
 
-      // คีย์ลัดเปลี่ยนหน้า (ไม่มี modifier)
-      if (readingView || !pageElements.length) return;
-      if (event.altKey || event.ctrlKey || event.metaKey) return;
-      if (event.target.closest("input, select, textarea, dialog")) return;
+      document.addEventListener("fullscreenchange", () => {
+        const active = !!document.fullscreenElement;
+        document.body.classList.toggle("is-fullscreen", active);
+        $("fullscreenBtn").textContent = active ? "✕ ออกจากเต็มจอ" : "⛶ เต็มจอ";
+      });
 
-      if (event.key === "ArrowRight") changePage(currentPage + 1);
-      if (event.key === "ArrowLeft") changePage(currentPage - 1);
-    });
+      // นำทางหน้า
+      document.querySelectorAll("[data-nav]").forEach(nav => {
+        nav.addEventListener("click", event => {
+          const go = event.target.closest("[data-go]");
+          if (go) showPage(currentPage + Number(go.dataset.go));
+        });
 
-    /* ================= ตั้งค่าอื่น ๆ ================= */
+        const input = nav.querySelector("[data-page-input]");
+        input.addEventListener("change", () => {
+          const value = Number(input.value);
+          if (Number.isFinite(value) && value >= 1) showPage(value - 1);
+        });
+        input.addEventListener("keydown", event => {
+          if (event.key === "Enter") input.blur();
+        });
+      });
 
-    function updateLanguage() {
-      const language = $("sourceLanguage").value;
-      if (!translatedMode()) document.documentElement.lang = language;
-      $("readerArticle").lang = language;
-      for (const page of pageElements) page.lang = language;
-      stopReading();
-    }
+      // เสียง
+      $("playBtn").addEventListener("click", () => playFrom(currentPage));
+      $("pauseBtn").addEventListener("click", togglePause);
+      $("stopBtn").addEventListener("click", () => {
+        stopReading();
+        setStatus("หยุดการอ่านออกเสียงแล้ว");
+      });
+      $("nextBtn").addEventListener("click", skipNext);
+      $("prevBtn").addEventListener("click", goPrev);
 
-    function trimBeforeOffset(content, offset) {
-      let position = 0;
+      voiceSelect.addEventListener("change", () => {
+        userPickedVoice = voiceSelect.value !== "";
+        const voice = voices[Number(voiceSelect.value)];
+        pickedVoiceKey = voice ? `${voice.name}|${voice.lang}` : "";
+      });
 
-      for (const block of [...content.children]) {
-        const length = block.textContent.length;
-        const before = position + length <= offset &&
-          !(length === 0 && position === offset);
+      if (speechSupported) {
+        loadVoices();
+        speechSynthesis.onvoiceschanged = loadVoices;
 
-        if (before) {
-          block.remove();
-          position += length;
-          continue;
-        }
-
-        if (position < offset && length > 0) {
-          block.replaceWith(
-            sliceBlock(block, offset - position, length, getTextNodes(block))
-          );
-        }
-        break;
-      }
-    }
-
-    function buildReadingArticle() {
-      const template = document.createElement("template");
-      template.innerHTML = sourceHtml;
-
-      const startPage =
-        $("readFromPage").checked && !paginationDirty && pageElements.length
-          ? Math.min(currentPage, pageElements.length - 1)
-          : 0;
-
-      if (startPage > 0) {
-        // ใช้ข้อความต้นฉบับ ไม่ใช่ข้อความที่ Edge แปลแล้ว
-        trimBeforeOffset(template.content, pageOffset(startPage));
-      }
-
-      for (const marker of template.content.querySelectorAll("p.source-marker")) {
-        const divider = document.createElement("hr");
-        divider.className = "source-break";
-        divider.title = marker.textContent.trim();
-        marker.replaceWith(divider);
-      }
-
-      $("readerTitle").textContent = startPage > 0
-        ? `${$("documentTitle").textContent} (เริ่มจากหน้า ${startPage + 1})`
-        : $("documentTitle").textContent;
-      $("readerArticle").lang = $("sourceLanguage").value;
-      $("readerBody").replaceChildren(template.content);
-    }
-
-    function setReadingView(enabled) {
-      if (enabled === readingView) return;
-
-      if (enabled && !sourceHtml) {
-        setStatus("เปิดไฟล์ก่อน จึงจะสลับเป็นมุมมองอ่านต่อเนื่องได้");
-        return;
-      }
-
-      stopReading();
-      readingView = enabled;
-
-      document.body.classList.toggle("reading-view", enabled);
-      $("readerArticle").hidden = !enabled;
-      $("readingViewBtn").textContent =
-        enabled ? "กลับมุมมองแบ่งหน้า" : "Reading mode (Edge)";
-
-      if (enabled) {
-        buildReadingArticle();
-        window.scrollTo({ top: 0 });
-        void $("readerArticle").offsetHeight;
-        setStatus("อยู่ในมุมมองอ่านต่อเนื่อง · กด F9 หรือคลิกไอคอนหนังสือที่แถบที่อยู่ของ Edge");
+        // เบราว์เซอร์บางตัวไม่ยิง voiceschanged — ลองซ้ำสักพัก
+        let tries = 0;
+        const timer = setInterval(() => {
+          if (voices.length || ++tries > 12) clearInterval(timer);
+          else loadVoices();
+        }, 350);
       } else {
-        $("readerBody").replaceChildren();
-
-        if (paginationDirty) {
-          paginationDirty = false;
-          paginate(currentPage);
-        } else {
-          setStatus("กลับสู่มุมมองแบ่งหน้าแล้ว");
-        }
+        voiceSelect.disabled = true;
+        voiceSelect.replaceChildren(
+          new Option("ไม่รองรับการอ่านออกเสียง", ""));
+        $("voiceHint").textContent = "เบราว์เซอร์นี้ไม่รองรับการอ่านออกเสียง";
       }
-    }
 
-    $("readingViewBtn").addEventListener("click", () => {
-      setReadingView(!readingView);
-    });
-
-    $("readFromPage").addEventListener("change", () => {
-      if (readingView) buildReadingArticle();
-    });
-
-    $("readingHelpBtn").addEventListener("click", () => {
-      $("readingDialog").showModal();
-    });
-
-    document.addEventListener("keydown", event => {
-      if (event.key === "F9" && sourceHtml && !readingView) {
-        setReadingView(true);
-      }
-    });
-
-    function changeFont(delta) {
-      fontSize = Math.max(13, Math.min(28, fontSize + delta));
-      document.documentElement.style.setProperty("--reader-size", `${fontSize}px`);
-      $("fontValue").textContent = `${fontSize}px`;
-      schedulePagination();
-    }
-
-    $("smallerBtn").addEventListener("click", () => changeFont(-1));
-    $("largerBtn").addEventListener("click", () => changeFont(1));
-
-    $("themeSelect").addEventListener("change", event => {
-      document.body.classList.toggle("dark", event.target.value === "dark");
-    });
-
-    $("sourceLanguage").addEventListener("change", updateLanguage);
-
-    for (const id of ["pdfMode", "ocrLang"]) {
-      $(id).addEventListener("change", () => {
-        if (lastFile && !$("reprocessBtn").disabled) {
-          setStatus("เปลี่ยนการตั้งค่า PDF แล้ว กด «ประมวลผล PDF ใหม่» เพื่อใช้งาน");
-        }
+      // คีย์บอร์ด / resize / ปิดหน้า
+      document.addEventListener("keydown", onKeydown);
+      window.addEventListener("resize", onResize);
+      window.addEventListener("pagehide", () => {
+        if (speechSupported) speechSynthesis.cancel();
       });
+
+      updateDocButtons();
     }
 
-    $("translateHelpBtn").addEventListener("click", () => {
-      $("translateDialog").showModal();
-    });
-
-    $("fullscreenBtn").addEventListener("click", async () => {
-      try {
-        if (document.fullscreenElement) {
-          await document.exitFullscreen();
-        } else {
-          await document.documentElement.requestFullscreen();
-        }
-      } catch {
-        setStatus("เบราว์เซอร์ไม่อนุญาตให้เปิดเต็มจอ");
-      }
-    });
-
-    document.addEventListener("fullscreenchange", () => {
-      $("fullscreenBtn").textContent =
-        document.fullscreenElement ? "ออกจากเต็มจอ" : "เต็มจอ";
-    });
-
-    $("fileInput").addEventListener("change", event => {
-      openFile(event.target.files?.[0]);
-      event.target.value = "";
-    });
-
-    $("dropzone").addEventListener("keydown", event => {
-      if (event.key === "Enter" || event.key === " ") {
-        event.preventDefault();
-        $("fileInput").click();
-      }
-    });
-
-    for (const name of ["dragenter", "dragover"]) {
-      $("dropzone").addEventListener(name, event => {
-        event.preventDefault();
-        $("dropzone").classList.add("dragover");
-      });
-    }
-
-    for (const name of ["dragleave", "drop"]) {
-      $("dropzone").addEventListener(name, event => {
-        event.preventDefault();
-        $("dropzone").classList.remove("dragover");
-      });
-    }
-    // วางไฟล์ตรงไหนของหน้าก็ได้ (กัน Edge เปิดไฟล์ทับหน้าแอป)
-    document.addEventListener("dragover", event => event.preventDefault());
-    document.addEventListener("drop", event => {
-      event.preventDefault();
-      openFile(event.dataTransfer?.files?.[0]);
-    });
-
-    window.addEventListener("resize", () => {
-      if (sourceHtml && pagesHost.clientWidth !== lastLayoutWidth) {
-        schedulePagination();
-      }
-    });
-
-    if (speechSupported) {
-      loadVoices();
-      speechSynthesis.addEventListener("voiceschanged", loadVoices);
-    } else {
-      voiceSelect.disabled = true;
-      $("rateInput").disabled = true;
-      $("prevBtn").disabled = true;
-      $("nextBtn").disabled = true;
-      updateVoiceHint();
-    }
+    init();
   </script>
 </body>
 </html>
