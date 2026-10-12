@@ -7,7 +7,7 @@
 <meta name="color-scheme" content="light dark">
 <meta name="theme-color" media="(prefers-color-scheme: light)" content="#eef1f8">
 <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#101422">
-<meta name="description" content="อ่านไฟล์ DOCX และ PDF ทีละหน้า พร้อมเสียงอ่านภาษาไทย ไฮไลต์ข้อความ และ OCR สำหรับ PDF สแกน — ประมวลผลในเบราว์เซอร์ทั้งหมด">
+<meta name="description" content="อ่านไฟล์ DOCX และ PDF ทีละหน้า พร้อมเสียงอ่านภาษาไทยธรรมชาติ Premwadee ไฮไลต์ข้อความ และ OCR สำหรับ PDF สแกน — ประมวลผลในเบราว์เซอร์ทั้งหมด">
 
 <script>
 /* ตั้งธีมให้เร็วที่สุดก่อนเรนเดอร์ (กันจอกะพริบ) */
@@ -798,6 +798,16 @@ try {
             ประมวลผล PDF ใหม่
           </button>
 
+          <p class="section-label">เสียงอ่าน</p>
+
+          <div class="setting">
+            <label for="voiceMode">เสียงเริ่มต้น</label>
+            <select id="voiceMode">
+              <option value="thai" selected>Premwadee (ไทยธรรมชาติ)</option>
+              <option value="auto">ตามภาษาเอกสาร</option>
+            </select>
+          </div>
+
           <p class="section-label">ภาษา &amp; การแปล</p>
 
           <div class="setting">
@@ -815,7 +825,8 @@ try {
 
           <div class="help">
             <p><strong>แปลเป็นไทยด้วย Edge</strong><br>
-              ตรวจว่า «ภาษาต้นฉบับ» ถูกต้อง แล้วใช้คำสั่งแปลภาษาของ Edge</p>
+              ตรวจว่า «ภาษาต้นฉบับ» ถูกต้อง แล้วใช้คำสั่งแปลภาษาของ Edge
+              เมื่อแปลแล้วเสียงอ่านจะใช้ Premwadee อ่านฉบับแปลไทย</p>
             <button id="translateHelpBtn" class="secondary" type="button">ดูวิธีแปล</button>
           </div>
 
@@ -834,7 +845,8 @@ try {
 
           <p class="note">
             ไฟล์และ OCR ประมวลผลภายในเบราว์เซอร์ทั้งหมด ไม่มีการอัปโหลดไปยังเซิร์ฟเวอร์
-            ส่วนเสียงอ่านและการแปลเป็นบริการออนไลน์ของเบราว์เซอร์
+            เสียง Premwadee เป็นเสียงออนไลน์แบบธรรมชาติของ Edge
+            ต้องเปิดด้วย Edge และเชื่อมต่ออินเทอร์เน็ต
           </p>
         </div>
       </div>
@@ -884,7 +896,7 @@ try {
         <div class="welcome-icon" aria-hidden="true">📄</div>
         <h2>อ่านเอกสารทีละหน้า สบายตา</h2>
         <p>เปิดไฟล์ Word หรือ PDF แล้วอ่านเป็นหน้า ๆ
-          พร้อมเสียงอ่านภาษาไทยและการไฮไลต์ข้อความ</p>
+          พร้อมเสียงอ่านภาษาไทยธรรมชาติและการไฮไลต์ข้อความ</p>
         <ul class="feature-list">
           <li>
             <span aria-hidden="true">📖</span>
@@ -893,8 +905,8 @@ try {
           </li>
           <li>
             <span aria-hidden="true">🔊</span>
-            <div><strong>เสียงอ่านไทย</strong>
-              <small>ฟังด้วยเสียง Premwadee ของ Edge พร้อมไฮไลต์</small></div>
+            <div><strong>เสียงไทยธรรมชาติ Premwadee</strong>
+              <small>เสียงออนไลน์ของ Edge พร้อมไฮไลต์ข้อความที่กำลังอ่าน</small></div>
           </li>
           <li>
             <span aria-hidden="true">🔎</span>
@@ -1000,7 +1012,7 @@ try {
       <li>เปิดไฟล์ แล้วตรวจว่า «ภาษาต้นฉบับ» ตรงกับเอกสาร</li>
       <li>กดไอคอนแปลภาษาที่แถบที่อยู่ของ Edge หรือคลิกขวาแล้วเลือกคำสั่งแปล</li>
       <li>เลือกภาษาปลายทางเป็น «ไทย»</li>
-      <li>กด «▶ อ่านจากหน้านี้» เพื่อฟังฉบับแปลด้วยเสียงภาษาไทย</li>
+      <li>กด «▶ อ่านจากหน้านี้» เพื่อฟังฉบับแปลด้วยเสียงไทยธรรมชาติ Premwadee</li>
     </ol>
     <p>
       เว็บไซต์ไม่สามารถสั่งให้ Edge แปลอัตโนมัติได้
@@ -1040,8 +1052,12 @@ try {
     const OCR_MAX_SIDE = 3500;
     const PAGE_DELAY_MS = 5000;       // พักระหว่างหน้าก่อนอ่านหน้าถัดไป
     const TRANSLATE_WAIT_MS = 8000;   // รอ Edge แปลหน้าใหม่ก่อนเริ่มอ่าน
-    const DEFAULT_VOICE_PATTERN = /premwadee/i;
     const STORAGE_KEY = "aun-sabai-v1";
+
+    /* เสียงเริ่มต้น: Microsoft Premwadee (ไทยธรรมชาติ) ของ Edge
+       ชื่อเต็มใน Edge: "Microsoft Premwadee Online (Natural) - Thai (Thailand)" */
+    const DEFAULT_VOICE_PATTERN = /premwadee/i;
+    const VOICE_NATURAL_PATTERN = /natural|neural|online/i;
 
     const speechSupported =
       "speechSynthesis" in window &&
@@ -1050,16 +1066,18 @@ try {
     const scriptCache = {};
 
     function loadScript(src) {
-      scriptCache[src] ??= new Promise((resolve, reject) => {
-        const script = document.createElement("script");
-        script.src = src;
-        script.onload = resolve;
-        script.onerror = () => {
-          delete scriptCache[src];
-          reject(new Error("LIBRARY_LOAD_FAILED"));
-        };
-        document.head.append(script);
-      });
+      if (!scriptCache[src]) {
+        scriptCache[src] = new Promise((resolve, reject) => {
+          const script = document.createElement("script");
+          script.src = src;
+          script.onload = resolve;
+          script.onerror = () => {
+            delete scriptCache[src];
+            reject(new Error("LIBRARY_LOAD_FAILED"));
+          };
+          document.head.append(script);
+        });
+      }
       return scriptCache[src];
     }
 
@@ -1226,6 +1244,7 @@ try {
           pdfMode: $("pdfMode").value,
           ocrLang: $("ocrLang").value,
           sourceLanguage: $("sourceLanguage").value,
+          voiceMode: $("voiceMode").value,
           readFromPage: $("readFromPage").checked,
           rate: $("rateInput").value
         }));
@@ -1715,7 +1734,9 @@ try {
 
         sheet.append(flow, footer);
         sheet._orig = flow.textContent;
-        pageFirstBlock.push(pageBlocks[0]._i ?? 0);
+        const firstBlock = pageBlocks[0];
+        pageFirstBlock.push(
+          typeof firstBlock._i === "number" ? firstBlock._i : 0);
         pagesHost.append(sheet);
         pageElements.push(sheet);
       });
@@ -1779,9 +1800,12 @@ try {
 
       const startFromCurrent =
         $("readFromPage").checked && pageFirstBlock.length > 0;
-      const startIndex = startFromCurrent
-        ? (pageFirstBlock[Math.min(currentPage, pageFirstBlock.length - 1)] ?? 0)
-        : 0;
+      let startIndex = 0;
+      if (startFromCurrent) {
+        const anchor = pageFirstBlock[
+          Math.min(currentPage, pageFirstBlock.length - 1)];
+        if (typeof anchor === "number") startIndex = anchor;
+      }
 
       const frag = document.createDocumentFragment();
       for (let i = startIndex; i < docBlocks.length; i++) {
@@ -1929,15 +1953,16 @@ try {
         checkCancelled(request);
         await renderDocument(file.name, html, note);
       } catch (error) {
-        if (request !== fileRequest || error?.name === "AbortError") return;
+        if (request !== fileRequest ||
+            (error && error.name === "AbortError")) return;
 
         console.error(error);
 
-        if (error?.message === "LIBRARY_LOAD_FAILED") {
+        if (error && error.message === "LIBRARY_LOAD_FAILED") {
           setStatus("โหลดไลบรารีไม่สำเร็จ กรุณาตรวจสอบอินเทอร์เน็ต", "error");
-        } else if (error?.name === "PasswordException") {
+        } else if (error && error.name === "PasswordException") {
           setStatus("ไม่สามารถเปิด PDF ที่มีรหัสผ่านได้", "error");
-        } else if (error?.name === "InvalidPDFException") {
+        } else if (error && error.name === "InvalidPDFException") {
           setStatus("ไฟล์ PDF เสียหายหรือไม่ใช่ PDF ที่ถูกต้อง", "error");
         } else if (isPdf) {
           setStatus("เปิด PDF ไม่สำเร็จ ลองเปลี่ยน «โหมด PDF» แล้วกด «ประมวลผล PDF ใหม่»", "error");
@@ -1962,6 +1987,7 @@ try {
       pageElements = [];
       readingView = false;
       paginationDirty = false;
+      translationWatchActive = true;
 
       document.body.classList.remove("reading-view");
       $("readingViewBtn").textContent = "📖 Reading mode (Edge)";
@@ -1990,38 +2016,63 @@ try {
 
     const isThai = voice => voice.lang.toLowerCase().startsWith("th");
 
-    function defaultVoiceIndex() {
-      const lang = spokenLanguage();
-      const wantThai = translatedMode() || lang.toLowerCase().startsWith("th");
+    /* ----- การแปลของ Edge ----- */
 
-      if (wantThai) {
+    function translatedMode() {
+      return /\btranslated-(ltr|rtl)\b/.test(document.documentElement.className) ||
+        !!document.querySelector("[_msttexthash]");
+    }
+
+    function spokenLanguage() {
+      return translatedMode()
+        ? (document.documentElement.lang || $("sourceLanguage").value)
+        : $("sourceLanguage").value;
+    }
+
+    /* ----- เลือกเสียง -----
+       ค่าเริ่มต้น (โหมด "thai") ใช้เสียงไทยธรรมชาติของ Premwadee เสมอ
+       ลำดับ: Premwadee → เสียงไทยธรรมชาติอื่น → เสียงไทยใด ๆ
+       → (สำรอง) เสียงตามภาษาเอกสาร                                     */
+    function defaultVoiceIndex() {
+      if (!voices.length) return -1;
+
+      const mode = $("voiceMode").value || "thai";
+      const preferThai =
+        mode !== "auto" ||
+        translatedMode() ||
+        spokenLanguage().toLowerCase().startsWith("th");
+
+      if (preferThai) {
+        // 1) Microsoft Premwadee — เสียงไทยธรรมชาติของ Edge
         let index = voices.findIndex(v =>
           isThai(v) && DEFAULT_VOICE_PATTERN.test(v.name));
+
+        // 2) เสียงไทยแบบธรรมชาติอื่น (Natural / Neural / Online)
         if (index < 0) {
           index = voices.findIndex(v =>
-            isThai(v) && /natural|neural/i.test(v.name));
+            isThai(v) && VOICE_NATURAL_PATTERN.test(v.name));
         }
+
+        // 3) เสียงไทยใด ๆ
         if (index < 0) index = voices.findIndex(isThai);
-        return index;
+        if (index >= 0) return index;
       }
 
-      const prefix = lang.split("-")[0].toLowerCase();
+      // สำรอง: ไม่มีเสียงไทย (หรือเลือกโหมดตามภาษาเอกสาร)
+      const prefix = spokenLanguage().split("-")[0].toLowerCase();
       const match = v => v.lang.toLowerCase().startsWith(prefix);
-      let index = voices.findIndex(v => match(v) && /natural|neural/i.test(v.name));
+      let index = voices.findIndex(v =>
+        match(v) && VOICE_NATURAL_PATTERN.test(v.name));
       if (index < 0) index = voices.findIndex(match);
-      if (index < 0) {
-        index = voices.findIndex(v =>
-          isThai(v) && DEFAULT_VOICE_PATTERN.test(v.name));
-      }
+      if (index < 0) index = voices.findIndex(isThai);
       return index;
     }
 
-    function voiceForLanguage(language) {
-      const prefix = language.split("-")[0].toLowerCase();
-      const matching = voices.filter(v =>
-        v.lang.toLowerCase().startsWith(prefix));
-      return matching.find(v => /natural|neural/i.test(v.name)) ||
-        matching[0] || null;
+    // ป้ายของตัวเลือก "อัตโนมัติ" ในช่องเสียง (บอกโหมดที่ตั้งไว้)
+    function autoVoiceLabel() {
+      return ($("voiceMode").value || "thai") === "auto"
+        ? "อัตโนมัติ (ตามภาษาเอกสาร)"
+        : "อัตโนมัติ (Premwadee — ไทยธรรมชาติ)";
     }
 
     function updateVoiceHint() {
@@ -2029,12 +2080,29 @@ try {
 
       if (!speechSupported) {
         hint.textContent = "เบราว์เซอร์นี้ไม่รองรับการอ่านออกเสียง";
-      } else if (!voices.length ||
-                 voices.some(v => DEFAULT_VOICE_PATTERN.test(v.name))) {
+        return;
+      }
+      if (!voices.length) {
         hint.textContent = "";
+        return;
+      }
+
+      // พบเสียง Premwadee: ใช้งานได้ตามปกติ ไม่ต้องแจ้ง
+      if (voices.some(v => DEFAULT_VOICE_PATTERN.test(v.name))) {
+        hint.textContent = "";
+        return;
+      }
+
+      const thaiNatural = voices.find(v =>
+        isThai(v) && VOICE_NATURAL_PATTERN.test(v.name));
+
+      if (thaiNatural) {
+        hint.textContent =
+          `ไม่พบเสียง Premwadee ใช้ «${thaiNatural.name}» แทน ` +
+          "(เปิดด้วย Microsoft Edge เพื่อใช้เสียง Premwadee)";
       } else if (voices.some(isThai)) {
         hint.textContent =
-          "ไม่พบเสียง Premwadee ในเบราว์เซอร์นี้ จึงใช้เสียงภาษาไทยอื่นแทน";
+          "ไม่พบเสียงไทยแบบธรรมชาติ จึงใช้เสียงไทยอื่นแทน";
       } else {
         hint.textContent =
           "ไม่พบเสียงภาษาไทย กรุณาเปิดด้วย Microsoft Edge และเชื่อมต่ออินเทอร์เน็ต";
@@ -2048,20 +2116,35 @@ try {
       if (!available.length) return;
 
       voices = available;
-      voiceSelect.replaceChildren(
-        new Option("อัตโนมัติ (ตามภาษาเอกสาร)", "")
-      );
+      voiceSelect.replaceChildren(new Option(autoVoiceLabel(), ""));
 
       const thaiGroup = document.createElement("optgroup");
       thaiGroup.label = "ภาษาไทย";
       const otherGroup = document.createElement("optgroup");
       otherGroup.label = "ภาษาอื่น";
 
-      voices.forEach((voice, index) => {
-        const option = new Option(
-          `${voice.name} (${voice.lang})`, String(index));
-        (isThai(voice) ? thaiGroup : otherGroup).append(option);
-      });
+      // เรียงเสียงไทย: Premwadee ขึ้นบนสุด ตามด้วยเสียงธรรมชาติ แล้วเป็นตัวอักษร
+      const rank = v =>
+        DEFAULT_VOICE_PATTERN.test(v.name) ? 0 :
+        VOICE_NATURAL_PATTERN.test(v.name) ? 1 : 2;
+
+      const indexed = voices.map((voice, index) => ({ voice, index }));
+      const thaiList = indexed
+        .filter(x => isThai(x.voice))
+        .sort((a, b) =>
+          rank(a.voice) - rank(b.voice) ||
+          a.voice.name.localeCompare(b.voice.name));
+      const otherList = indexed
+        .filter(x => !isThai(x.voice))
+        .sort((a, b) => a.voice.name.localeCompare(b.voice.name));
+
+      const optionFor = ({ voice, index }) => {
+        const star = DEFAULT_VOICE_PATTERN.test(voice.name) ? "★ " : "";
+        return new Option(`${star}${voice.name} (${voice.lang})`, String(index));
+      };
+
+      thaiList.forEach(x => thaiGroup.append(optionFor(x)));
+      otherList.forEach(x => otherGroup.append(optionFor(x)));
 
       if (thaiGroup.children.length) voiceSelect.append(thaiGroup);
       if (otherGroup.children.length) voiceSelect.append(otherGroup);
@@ -2080,14 +2163,14 @@ try {
     function resolveVoice() {
       if (!voices.length) loadVoices();
 
+      // เลือกเสียงระบุเองจากช่องเสียง
       if (voiceSelect.value !== "") {
         return voices[Number(voiceSelect.value)] || null;
       }
-      if (!userPickedVoice) {
-        const index = defaultVoiceIndex();
-        if (index >= 0) return voices[index];
-      }
-      return voiceForLanguage(spokenLanguage());
+
+      // ตัวเลือก "อัตโนมัติ": ใช้ลำดับ Premwadee → ไทยธรรมชาติ → ไทย → ภาษาเอกสาร
+      const index = defaultVoiceIndex();
+      return index >= 0 ? voices[index] : null;
     }
 
     // ตัดข้อความยาวเป็นท่อนสั้น ๆ กันเสียงค้าง/ถูกตัดกลางคัน
@@ -2136,7 +2219,7 @@ try {
     function setHighlight(element) {
       if (highlighted === element) return;
 
-      highlighted?.classList.remove("speaking");
+      if (highlighted) highlighted.classList.remove("speaking");
       highlighted = element;
 
       if (!element) return;
@@ -2146,19 +2229,6 @@ try {
       if (rect.top < 100 || rect.bottom > window.innerHeight - 160) {
         element.scrollIntoView({ behavior: "smooth", block: "center" });
       }
-    }
-
-    /* ----- การแปลของ Edge ----- */
-
-    function translatedMode() {
-      return /\btranslated-(ltr|rtl)\b/.test(document.documentElement.className) ||
-        !!document.querySelector("[_msttexthash]");
-    }
-
-    function spokenLanguage() {
-      return translatedMode()
-        ? (document.documentElement.lang || $("sourceLanguage").value)
-        : $("sourceLanguage").value;
     }
 
     // รอให้ Edge แปลหน้านี้เสร็จ (ถ้าเปิดการแปลอยู่) แล้วค่อยอ่านฉบับแปล
@@ -2236,7 +2306,8 @@ try {
     // ดึงข้อความของหน้านั้น "ตอนที่จะอ่านจริง" เพื่อให้ได้ข้อความที่ Edge แปลแล้ว
     function collectPageItems(pageIndex, language) {
       const items = [];
-      const flow = pageElements[pageIndex]?.querySelector(".flow");
+      const page = pageElements[pageIndex];
+      const flow = page ? page.querySelector(".flow") : null;
       if (!flow) return items;
 
       for (const block of flow.children) {
@@ -2262,7 +2333,8 @@ try {
       if (session !== speechSession) return;
 
       const voice = resolveVoice();
-      speechItems = collectPageItems(pageIndex, voice?.lang || "th");
+      const lang = (voice && voice.lang) || "th-TH";
+      speechItems = collectPageItems(pageIndex, lang);
       speechIndex = from === "last"
         ? Math.max(0, speechItems.length - 1)
         : 0;
@@ -2276,7 +2348,7 @@ try {
 
       setStatus(
         `กำลังอ่านออกเสียงหน้า ${pageIndex + 1} ` +
-        `ด้วย ${voice?.name || "เสียงเริ่มต้นของระบบ"}`
+        `ด้วย ${voice ? voice.name : "เสียงเริ่มต้นของระบบ"}`
       );
       updateSpeechPos();
       speakNext(session);
@@ -2334,7 +2406,8 @@ try {
       const utterance = new SpeechSynthesisUtterance(item.text);
       const id = ++utteranceId;
 
-      utterance.lang = voice?.lang || "th-TH";
+      // ใช้ภาษาของเสียงที่เลือก (Premwadee = th-TH) เพื่อให้เครื่องยนต์เสียงถูกต้อง
+      utterance.lang = (voice && voice.lang) || "th-TH";
       if (voice) utterance.voice = voice;
       utterance.rate = Number($("rateInput").value) || 0.9;
       utterance.pitch = 1;
@@ -2558,7 +2631,7 @@ try {
 
       window.addEventListener("dragenter", event => {
         if (!event.dataTransfer ||
-            ![...event.dataTransfer.types].includes("Files")) return;
+            !Array.from(event.dataTransfer.types).includes("Files")) return;
         dragDepth++;
         document.body.classList.add("dropping");
       });
@@ -2576,7 +2649,8 @@ try {
         document.body.classList.remove("dropping");
         zone.classList.remove("dragover");
 
-        const file = event.dataTransfer?.files?.[0];
+        const transfer = event.dataTransfer;
+        const file = transfer && transfer.files ? transfer.files[0] : null;
         if (file) openFile(file);
       });
 
@@ -2625,6 +2699,9 @@ try {
       $("rateValue").textContent =
         Number($("rateInput").value).toFixed(2) + "×";
 
+      // เสียงเริ่มต้น: Premwadee (ไทยธรรมชาติ) — ค่าเริ่มต้นของแอป
+      $("voiceMode").value = saved.voiceMode === "auto" ? "auto" : "thai";
+
       // ไฟล์
       $("dropzone").addEventListener("keydown", event => {
         if (event.key === "Enter" || event.key === " ") {
@@ -2634,9 +2711,9 @@ try {
       });
 
       $("fileInput").addEventListener("change", event => {
-        const file = event.target.files?.[0];
+        const file = event.target.files && event.target.files[0];
         if (file) openFile(file);
-        event.target.value = ""; // แก้บัค: เปิดไฟล์เดิมซ้ำได้
+        event.target.value = ""; // แก้บั๊ก: เปิดไฟล์เดิมซ้ำได้
       });
 
       $("welcomePickBtn").addEventListener("click", () => $("fileInput").click());
@@ -2741,6 +2818,24 @@ try {
       });
 
       // เสียง
+      $("voiceMode").addEventListener("change", () => {
+        saveSettings();
+
+        if (!speechSupported || !voices.length) return;
+
+        // อัปเดตป้ายตัวเลือก "อัตโนมัติ" และเสียงที่เลือกไว้
+        // (แก้บั๊ก SyntaxError: ห้ามใช้ ?. ทางซ้ายของเครื่องหมาย =)
+        if (voiceSelect.options.length) {
+          voiceSelect.options[0].textContent = autoVoiceLabel();
+        }
+
+        if (!userPickedVoice) {
+          const index = defaultVoiceIndex();
+          voiceSelect.value = index >= 0 ? String(index) : "";
+        }
+        updateVoiceHint();
+      });
+
       $("playBtn").addEventListener("click", () => playFrom(currentPage));
       $("pauseBtn").addEventListener("click", togglePause);
       $("stopBtn").addEventListener("click", () => {
@@ -2783,7 +2878,19 @@ try {
       updateDocButtons();
     }
 
-    init();
+    /* แสดง error ชัดเจนถ้าเริ่มต้นไม่สำเร็จ (ช่วย debug ในอนาคต) */
+    try {
+      init();
+    } catch (error) {
+      console.error(error);
+      const status = $("status");
+      if (status) {
+        status.textContent =
+          "เกิดข้อผิดพลาดในการเริ่มต้นแอป: " +
+          (error && error.message ? error.message : error);
+        status.classList.add("error");
+      }
+    }
   </script>
 </body>
 </html>
