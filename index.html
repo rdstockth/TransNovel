@@ -810,6 +810,13 @@ try {
             <input id="docxStripImages" type="checkbox" checked>
           </div>
 
+          <p class="section-label">ตัดส่วนที่ไม่ใช่เนื้อหา</p>
+
+          <div class="setting">
+            <label for="skipFrontMatter">ข้ามสารบัญ &amp; หน้ารูป</label>
+            <input id="skipFrontMatter" type="checkbox" checked>
+          </div>
+
           <p class="section-label">เสียงอ่าน</p>
 
           <div class="setting">
@@ -1257,6 +1264,7 @@ try {
           ocrLang: $("ocrLang").value,
           docxStripImages: $("docxStripImages").checked,
           pdfStripHeaderFooter: $("pdfStripHeaderFooter").checked,
+          skipFrontMatter: $("skipFrontMatter").checked,
           sourceLanguage: $("sourceLanguage").value,
           voiceMode: $("voiceMode").value,
           readFromPage: $("readFromPage").checked,
@@ -1547,6 +1555,122 @@ try {
 
     /* ================= แปลงไฟล์ ================= */
 
+    /* ================= ตัดส่วนที่ไม่ใช่เนื้อหา (สารบัญ / หน้ารูป ช่วงต้นเล่ม) =================
+       ใช้เกณฑ์แบบระมัดระวัง และดูเฉพาะช่วงต้นของเอกสารเท่านั้น */
+    const TOC_TITLE =
+      /^\s*(สารบัญ(?:เรื่อง|ตาราง|ภาพ|รูป|รูปภาพ|แผนภูมิ)?|table of contents|contents|list of (?:figures|tables)|index of (?:figures|tables))\s*:?\s*$/i;
+    const TOC_LEADER = /(?:\.{3,}|…|·{3,}|‧{3,}|_{3,})\s*(?:\d{1,4}|[ivxlc]{1,6})\s*$/i;
+    const TOC_NUMBERED =
+      /^(?:\d+(?:\.\d+)*[.)]?\s|บทที่\s*\d+|chapter\s+\d+|ภาคผนวก|appendix|[ivx]+\.\s)/i;
+    const TOC_PAGE_END = /\s\d{1,4}$/;
+
+    // loose = ใช้เมื่อเจอหัวข้อ "สารบัญ" แล้ว (บรรทัดที่ลงท้ายด้วยเลขหน้าก็นับ)
+    function isTocEntry(text, loose = false) {
+      const t = text.replace(/\s+/g, " ").trim();
+      if (t.length < 3 || t.length > (loose ? 120 : 160)) return false;
+      if (TOC_LEADER.test(t)) return true;
+      if (loose) return TOC_PAGE_END.test(t);
+      return TOC_NUMBERED.test(t) && TOC_PAGE_END.test(t);
+    }
+
+    function looksLikeTocPage(texts) {
+      const lines = texts.map(t => t.replace(/\s+/g, " ").trim()).filter(Boolean);
+      if (lines.length < 4) return false;
+
+      const hasTitle = lines.slice(0, 3).some(l => TOC_TITLE.test(l));
+      const entries = lines.filter(l => isTocEntry(l, hasTitle)).length;
+      const ratio = entries / lines.length;
+
+      return (hasTitle && ratio >= 0.3) || (lines.length >= 6 && ratio >= 0.5);
+    }
+
+    // สุ่มดูหน้านอกช่วงต้นเล่ม ว่าเอกสารนี้เป็น PDF ที่มีข้อความจริงหรือเป็นภาพสแกนทั้งเล่ม
+    async function sampleHasText(pdf, total, frontLimit) {
+      const numbers = new Set();
+      for (let k = 1; k <= 6; k++) {
+        numbers.add(Math.min(total,
+          Math.max(frontLimit + 1, Math.round((total * k) / 7))));
+      }
+
+      let withText = 0;
+      for (const n of numbers) {
+        try {
+          const page = await pdf.getPage(n);
+          const content = await page.getTextContent();
+          const visible = content.items
+            .map(item => item.str || "").join("").replace(/\s/g, "");
+          if (visible.length >= 25) withText++;
+          page.cleanup();
+        } catch { /* ข้ามหน้าที่อ่านไม่ได้ */ }
+      }
+      return withText * 2 >= numbers.size;
+    }
+
+    function stripDocxFrontMatter(html) {
+      const template = document.createElement("template");
+      template.innerHTML = html;
+
+      const blocks = [...template.content.children];
+      const limit = Math.min(blocks.length,
+        Math.max(30, Math.ceil(blocks.length * 0.25)));
+
+      const textOf = el => el.textContent.replace(/\s+/g, " ").trim();
+      const entriesOf = el => /^(UL|OL)$/.test(el.tagName)
+        ? [...el.querySelectorAll("li")].map(textOf).filter(Boolean)
+        : [textOf(el)].filter(Boolean);
+
+      const isEntryBlock = (el, loose) => {
+        if (el.querySelector("img") && !textOf(el)) return true;
+        const items = entriesOf(el);
+        if (!items.length) return true; // บล็อกว่าง
+        const hits = items.filter(t => isTocEntry(t, loose)).length;
+        return hits / items.length >= 0.6;
+      };
+
+      const remove = new Set();
+
+      // 1) หัวข้อ "สารบัญ" + รายการที่ตามมา
+      let i = 0;
+      while (i < limit) {
+        if (TOC_TITLE.test(textOf(blocks[i]))) {
+          remove.add(blocks[i]);
+          let j = i + 1, lastEntry = i, misses = 0;
+          while (j < blocks.length && misses < 2) {
+            if (isEntryBlock(blocks[j], true)) { lastEntry = j; misses = 0; }
+            else misses++;
+            j++;
+          }
+          for (let k = i + 1; k <= lastEntry; k++) remove.add(blocks[k]);
+          i = lastEntry + 1;
+        } else {
+          i++;
+        }
+      }
+
+      // 2) ไม่มีหัวข้อ แต่มีรายการแบบสารบัญต่อกัน 5 บรรทัดขึ้นไป
+      let run = [];
+      for (let k = 0; k < limit; k++) {
+        const el = blocks[k];
+        if (!remove.has(el) && entriesOf(el).length && isEntryBlock(el, false)) {
+          run.push(el);
+        } else {
+          if (run.length >= 5) run.forEach(x => remove.add(x));
+          run = [];
+        }
+      }
+      if (run.length >= 5) run.forEach(x => remove.add(x));
+
+      // 3) บล็อกที่มีแต่รูป (หน้าปก/ภาพประกอบช่วงต้น)
+      for (let k = 0; k < limit; k++) {
+        if (blocks[k].querySelector("img") && !textOf(blocks[k])) {
+          remove.add(blocks[k]);
+        }
+      }
+
+      remove.forEach(el => el.remove());
+      return { html: template.innerHTML, removed: remove.size };
+    }
+
     /* mammoth อ่านเฉพาะเนื้อหาหลัก จึงไม่ดึง Header/Footer ของ Word มาอยู่แล้ว
        ส่วนรูปภาพกรองตามตัวเลือก (ค่าเริ่มต้น: กรองออก) */
     function stripDocxImages(html) {
@@ -1580,14 +1704,22 @@ try {
       }
 
       const result = await mammoth.convertToHtml(options);
-      const html = stripImages ? stripDocxImages(result.value) : result.value;
+      let html = stripImages ? stripDocxImages(result.value) : result.value;
+
+      let skippedParts = 0;
+      if ($("skipFrontMatter").checked) {
+        const trimmed = stripDocxFrontMatter(html);
+        html = trimmed.html;
+        skippedParts = trimmed.removed;
+      }
 
       return {
         html,
         note: (result.messages.length
           ? "ไฟล์ Word (รูปแบบบางส่วนอาจต่างจากต้นฉบับ)"
           : "ไฟล์ Word") +
-          (stripImages ? " · ไม่แสดงรูปภาพ" : "")
+          (stripImages ? " · ไม่แสดงรูปภาพ" : "") +
+          (skippedParts ? ` · ข้ามสารบัญ/รูปช่วงต้น ${skippedParts} ส่วน` : "")
       };
     }
 
@@ -1625,6 +1757,12 @@ try {
       const pdf = await task.promise;
       const total = pdf.numPages;
       const stripHF = $("pdfStripHeaderFooter").checked;
+      const skipFront = $("skipFrontMatter").checked && total >= 4;
+      const frontLimit = Math.min(12, Math.max(3, Math.ceil(total * 0.25)));
+      const textBased = skipFront && mode === "auto"
+        ? await sampleHasText(pdf, total, frontLimit)
+        : false;
+      let skipped = 0;
       const records = [];
       let worker = null;
       let ocrCount = 0;
@@ -1653,6 +1791,19 @@ try {
             lines.forEach(l => { l.relTop = 1 - (l.y - minY) / height; });
 
             blocks = linesToBlocks(lines);
+
+            if (skipFront && number <= frontLimit) {
+              const isToc = looksLikeTocPage(lines.map(l => l.text));
+              // เอกสารมีข้อความจริง แต่หน้าต้นเล่มไม่มีข้อความ = หน้ารูป/หน้าว่าง
+              const isImagePage = mode === "auto" && textBased && needsOcr(blocks);
+
+              if (isToc || isImagePage) {
+                skipped++;
+                page.cleanup();
+                records.push({ number, skip: true });
+                continue;
+              }
+            }
           }
 
           if (mode === "ocr" || (mode === "auto" && needsOcr(blocks))) {
@@ -1669,6 +1820,14 @@ try {
 
             const result = await ocrPage(page, worker);
             ocrProgressHandler = null;
+
+            if (skipFront && number <= frontLimit &&
+                looksLikeTocPage(result.text.split("\n"))) {
+              skipped++;
+              page.cleanup();
+              records.push({ number, skip: true });
+              continue;
+            }
 
             if (mode === "ocr" || result.blocks.length) {
               ocrData = result;
@@ -1692,11 +1851,12 @@ try {
       }
 
       // ตัดหัว/ท้ายกระดาษ (เมื่อเปิดตัวเลือก) แล้วสร้างเนื้อหา
-      const isHeaderFooter = stripHF ? buildHeaderFooterFilter(records) : null;
+      const kept = records.filter(record => !record.skip);
+      const isHeaderFooter = stripHF ? buildHeaderFooterFilter(kept) : null;
       const html = [];
       let textFound = false;
 
-      for (const record of records) {
+      for (const record of kept) {
         let blocks;
 
         if (record.ocr) {
@@ -1744,7 +1904,8 @@ try {
         note: (ocrCount
           ? `ใช้ OCR ${ocrCount} จาก ${total} หน้า`
           : `PDF ${total} หน้า`) +
-          (stripHF ? " · ตัดหัว/ท้ายกระดาษ" : "")
+          (stripHF ? " · ตัดหัว/ท้ายกระดาษ" : "") +
+          (skipped ? ` · ข้ามสารบัญ/หน้ารูป ${skipped} หน้า` : "")
       };
     }
 
@@ -2897,6 +3058,18 @@ try {
       });
 
       $("ocrLang").addEventListener("change", saveSettings);
+
+      $("skipFrontMatter").checked = saved.skipFrontMatter !== false; // เปิดเป็นค่าเริ่มต้น
+
+      $("skipFrontMatter").addEventListener("change", () => {
+        saveSettings();
+        if (!lastFile) return;
+        if (lastFile.name.toLowerCase().endsWith(".docx")) {
+          openFile(lastFile);
+        } else {
+          setStatus("บันทึกการตั้งค่าแล้ว กด «ประมวลผล PDF ใหม่» เพื่อใช้ค่านี้");
+        }
+      });
 
       $("pdfStripHeaderFooter").checked = saved.pdfStripHeaderFooter !== false; // เปิดเป็นค่าเริ่มต้น
 
