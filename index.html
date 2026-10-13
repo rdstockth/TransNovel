@@ -794,6 +794,11 @@ try {
             </select>
           </div>
 
+          <div class="setting">
+            <label for="pdfStripHeaderFooter">ตัดหัว-ท้ายกระดาษ</label>
+            <input id="pdfStripHeaderFooter" type="checkbox" checked>
+          </div>
+
           <button id="reprocessBtn" class="secondary full" type="button" disabled>
             ประมวลผล PDF ใหม่
           </button>
@@ -1251,6 +1256,7 @@ try {
           pdfMode: $("pdfMode").value,
           ocrLang: $("ocrLang").value,
           docxStripImages: $("docxStripImages").checked,
+          pdfStripHeaderFooter: $("pdfStripHeaderFooter").checked,
           sourceLanguage: $("sourceLanguage").value,
           voiceMode: $("voiceMode").value,
           readFromPage: $("readFromPage").checked,
@@ -1293,7 +1299,7 @@ try {
 
     /* ================= PDF: ข้อความในไฟล์ ================= */
 
-    function textItemsToBlocks(items) {
+    function textItemsToLines(items) {
       const lines = [];
       let line = null;
 
@@ -1329,7 +1335,10 @@ try {
       }
 
       if (line) lines.push(line);
+      return lines;
+    }
 
+    function linesToBlocks(lines) {
       const sizes = lines.map(l => l.size).sort((a, b) => a - b);
       const median = sizes[Math.floor(sizes.length / 2)] || 10;
       const listStart = /^([•▪●○◦‣\-–]|\d+[.)]|[ก-ฮ][.)])\s/;
@@ -1444,13 +1453,75 @@ try {
 
     async function ocrPage(page, worker) {
       const canvas = await renderPageToCanvas(page);
+      const height = canvas.height || 1;
       try {
         const { data } = await worker.recognize(canvas);
-        return ocrTextToBlocks(data.text || "");
+        const bandLines = [];
+        for (const l of data.lines || []) {
+          if (!l.bbox) continue;
+          const band = bandOf(((l.bbox.y0 + l.bbox.y1) / 2) / height);
+          const text = cleanOcrLine(l.text || "");
+          if (band && text) bandLines.push({ band, text });
+        }
+        const text = data.text || "";
+        return { text, bandLines, blocks: ocrTextToBlocks(text) };
       } finally {
         canvas.width = 0;
         canvas.height = 0;
       }
+    }
+
+    /* ================= ตัด Header / Footer ของ PDF =================
+       ดูเฉพาะแถบบน/ล่างของหน้า (HF_BAND) แล้วตัดบรรทัดที่
+       1) เป็นเลขหน้าล้วน ๆ หรือ
+       2) ซ้ำกันในหลายหน้า (ไม่นับตัวเลข เช่น "บทที่ 1" = "บทที่ 2") */
+    const HF_BAND = 0.08;
+    const PAGE_NUMBER_ONLY =
+      /^[-–—•\s]*(?:(?:page|หน้า)\s*)?\d{1,4}(?:\s*(?:\/|of|จาก)\s*\d{1,4})?[-–—•\s]*$/i;
+
+    // relTop: 0 = ขอบบนของหน้า, 1 = ขอบล่าง
+    function bandOf(relTop) {
+      if (relTop < HF_BAND) return "top";
+      if (relTop > 1 - HF_BAND) return "bottom";
+      return null;
+    }
+
+    function lineSignature(text) {
+      return text.toLowerCase().replace(/\d+/g, "#").replace(/\s+/g, " ").trim();
+    }
+
+    function bandItemsOf(record) {
+      if (record.ocr) return record.ocr.bandLines;
+      const items = [];
+      for (const l of record.lines) {
+        const band = bandOf(l.relTop);
+        if (band) items.push({ band, text: l.text });
+      }
+      return items;
+    }
+
+    function buildHeaderFooterFilter(records) {
+      const total = records.length;
+      const minCount = Math.max(2, Math.ceil(total * 0.4));
+      const counts = new Map();
+
+      for (const record of records) {
+        const seen = new Set();
+        for (const item of bandItemsOf(record)) {
+          const key = item.band + "|" + lineSignature(item.text);
+          if (seen.has(key)) continue;
+          seen.add(key);
+          counts.set(key, (counts.get(key) || 0) + 1);
+        }
+      }
+
+      return (band, text) => {
+        const clean = text.replace(/\s+/g, " ").trim();
+        if (!clean) return false;
+        if (PAGE_NUMBER_ONLY.test(clean)) return true;
+        return total >= 2 &&
+          (counts.get(band + "|" + lineSignature(clean)) || 0) >= minCount;
+      };
     }
 
     /* ================= ไดอะล็อกรหัสผ่าน PDF ================= */
@@ -1553,10 +1624,10 @@ try {
 
       const pdf = await task.promise;
       const total = pdf.numPages;
-      const html = [];
+      const stripHF = $("pdfStripHeaderFooter").checked;
+      const records = [];
       let worker = null;
       let ocrCount = 0;
-      let textFound = false;
 
       try {
         for (let number = 1; number <= total; number++) {
@@ -1568,12 +1639,20 @@ try {
           );
 
           const page = await pdf.getPage(number);
+          let lines = [];
           let blocks = [];
-          let usedOcr = false;
+          let ocrData = null;
 
+          // อ่านเฉพาะข้อความ (ไม่ดึงรูปภาพจาก PDF)
           if (mode !== "ocr") {
             const textContent = await page.getTextContent();
-            blocks = textItemsToBlocks(textContent.items);
+            lines = textItemsToLines(textContent.items);
+
+            const [, minY, , maxY] = page.view;
+            const height = (maxY - minY) || 1;
+            lines.forEach(l => { l.relTop = 1 - (l.y - minY) / height; });
+
+            blocks = linesToBlocks(lines);
           }
 
           if (mode === "ocr" || (mode === "auto" && needsOcr(blocks))) {
@@ -1588,25 +1667,17 @@ try {
               );
             };
 
-            const ocrBlocks = await ocrPage(page, worker);
+            const result = await ocrPage(page, worker);
             ocrProgressHandler = null;
 
-            if (mode === "ocr" || ocrBlocks.length) {
-              blocks = ocrBlocks;
-              usedOcr = true;
+            if (mode === "ocr" || result.blocks.length) {
+              ocrData = result;
               ocrCount++;
             }
           }
 
           page.cleanup();
-
-          if (blocks.length) textFound = true;
-
-          html.push(
-            `<p class="source-marker">— PDF ${number} / ${total}` +
-            `${usedOcr ? " · OCR" : ""} —</p>`
-          );
-          html.push(...blocks.map(blockToHtml));
+          records.push({ number, lines: ocrData ? [] : lines, ocr: ocrData });
         }
       } finally {
         ocrProgressHandler = null;
@@ -1620,6 +1691,47 @@ try {
         if (activePdfTask === task) activePdfTask = null;
       }
 
+      // ตัดหัว/ท้ายกระดาษ (เมื่อเปิดตัวเลือก) แล้วสร้างเนื้อหา
+      const isHeaderFooter = stripHF ? buildHeaderFooterFilter(records) : null;
+      const html = [];
+      let textFound = false;
+
+      for (const record of records) {
+        let blocks;
+
+        if (record.ocr) {
+          let text = record.ocr.text;
+          if (isHeaderFooter) {
+            const dropSet = new Set(
+              record.ocr.bandLines
+                .filter(item => isHeaderFooter(item.band, item.text))
+                .map(item => item.text)
+            );
+            if (dropSet.size) {
+              text = text.split("\n")
+                .filter(line => !dropSet.has(cleanOcrLine(line)))
+                .join("\n");
+            }
+          }
+          blocks = ocrTextToBlocks(text);
+        } else {
+          let lines = record.lines;
+          if (isHeaderFooter) {
+            lines = lines.filter(l =>
+              !isHeaderFooter(bandOf(l.relTop), l.text) || !bandOf(l.relTop));
+          }
+          blocks = linesToBlocks(lines);
+        }
+
+        if (blocks.length) textFound = true;
+
+        html.push(
+          `<p class="source-marker">— PDF ${record.number} / ${total}` +
+          `${record.ocr ? " · OCR" : ""} —</p>`
+        );
+        html.push(...blocks.map(blockToHtml));
+      }
+
       if (!textFound) {
         html.push(
           "<p>ไม่พบข้อความใน PDF นี้ ลองเลือกโหมด «OCR ทุกหน้า» " +
@@ -1629,9 +1741,10 @@ try {
 
       return {
         html: html.join("\n"),
-        note: ocrCount
+        note: (ocrCount
           ? `ใช้ OCR ${ocrCount} จาก ${total} หน้า`
-          : `PDF ${total} หน้า`
+          : `PDF ${total} หน้า`) +
+          (stripHF ? " · ตัดหัว/ท้ายกระดาษ" : "")
       };
     }
 
@@ -2784,6 +2897,15 @@ try {
       });
 
       $("ocrLang").addEventListener("change", saveSettings);
+
+      $("pdfStripHeaderFooter").checked = saved.pdfStripHeaderFooter !== false; // เปิดเป็นค่าเริ่มต้น
+
+      $("pdfStripHeaderFooter").addEventListener("change", () => {
+        saveSettings();
+        if (lastFile && lastFile.name.toLowerCase().endsWith(".pdf")) {
+          setStatus("บันทึกการตั้งค่าแล้ว กด «ประมวลผล PDF ใหม่» เพื่อใช้ค่านี้");
+        }
+      });
 
       $("docxStripImages").checked = saved.docxStripImages !== false; // เปิดเป็นค่าเริ่มต้น
 
